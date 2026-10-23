@@ -2,106 +2,11 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { countChapterWords } from "../lib/word-count";
-
-// Default Sample Academic Project
-const DEFAULT_PROJECT = {
-  id: "prj_001",
-  title: "An Empirical Investigation of Artificial Intelligence Adoption in Nigerian Commercial Banks: Operational Challenges, Customer Trust, and Financial Performance",
-  shortTitle: "AI Adoption in Nigerian Commercial Banks",
-  studentName: "Emmanuel Okafor",
-  matricNumber: "ENG/2021/04982",
-  department: "Banking and Finance",
-  faculty: "Faculty of Management Sciences",
-  institution: "University of Lagos (UNILAG)",
-  degree: "B.Sc. Banking & Finance",
-  citationStyle: "APA 7th Edition",
-  supervisor: "Dr. A. B. Adeyemi",
-  targetDate: "December 15, 2026",
-  chapters: {
-    1: {
-      title: "Chapter One: Introduction",
-      progress: 90,
-      subsections: [
-        "1.1 Background to the Study",
-        "1.2 Statement of the Problem",
-        "1.3 Research Questions",
-        "1.4 Aim and Objectives of the Study",
-        "1.5 Research Hypotheses",
-        "1.6 Significance of the Study",
-        "1.7 Scope and Delimitations",
-        "1.8 Definition of Operational Terms"
-      ],
-      content: `1.1 Background to the Study\nOver the past decade, the rapid progression of artificial intelligence (AI) and machine learning algorithms has fundamentally restructured global financial architectures. In developing economies, particularly within Sub-Saharan Africa, commercial deposit money banks are experiencing profound disruptions in transaction processing, algorithmic credit risk scoring, fraud surveillance, and customer relationship management (Adebayo & Okon, 2023).\n\nIn Nigeria, following the Central Bank of Nigeria's cashless economy mandates and the accelerated adoption of open banking frameworks, financial institutions are under unprecedented competitive pressure to optimize operational efficiency while curbing systemic non-performing loans. Machine learning models offer significant predictive precision over classical econometric credit-rating systems.\n\n1.2 Statement of the Problem\nDespite massive financial expenditures into automated banking systems and generative AI advisory engines, empirical evidence concerning their actual contribution to return on equity (ROE) and operational cost reduction remains conflicting. Nigerian commercial banks contend with severe infrastructural vulnerabilities, including frequent power grid collapses, recurring telecommunication latency, and high vulnerability to sophisticated cyber-fraud syndicates (Mensah et al., 2024).\n\nFurthermore, customer skepticism regarding algorithmic decision-making and data privacy under the Nigeria Data Protection Act (NDPA 2023) creates substantial friction. Many students and researchers struggle to capture this interplay between cutting-edge technology and emerging-market institutional voids.\n\n1.3 Aim and Objectives of the Study\nThe primary aim of this study is to critically evaluate the determinants and performance outcomes of artificial intelligence adoption across Tier-1 and Tier-2 commercial banks in Lagos State, Nigeria.\nSpecific objectives include:\n1. To examine the effect of algorithmic fraud detection systems on operational loss reduction.\n2. To investigate the relationship between automated AI credit scoring and non-performing loan ratios.\n3. To assess customer trust and behavioral intention toward conversational AI banking interfaces.`
-    },
-    2: {
-      title: "Chapter Two: Literature Review",
-      progress: 75,
-      subsections: [
-        "2.1 Conceptual Review",
-        "2.2 Theoretical Framework (TAM & UTAUT)",
-        "2.3 Empirical Literature Review",
-        "2.4 Summary of Gaps in Literature"
-      ],
-      content: `2.1 Conceptual Review\nArtificial intelligence in banking comprises cognitive computing, predictive analytics, natural language processing (NLP), and robotic process automation (RPA). According to Chinedu and Ibrahim (2023), AI-driven automation in financial intermediation diminishes human error and expedites loan appraisal workflows from days to mere seconds.\n\n2.2 Theoretical Framework\nThis investigation anchors its theoretical underpinning on the Unified Theory of Acceptance and Use of Technology (UTAUT) formulated by Venkatesh et al. (2003) and the Technology-Organization-Environment (TOE) framework by Tornatzky and Fleischer (1990).\n\nUTAUT asserts that performance expectancy, effort expectancy, social influence, and facilitating conditions collectively determine behavioral intention and subsequent usage behavior. In the Nigerian context, facilitating conditions (such as reliable internet bandwidth and stable regulatory directives) exert the strongest moderating influence on organizational AI assimilation.`
-    },
-    3: {
-      title: "Chapter Three: Research Methodology",
-      progress: 60,
-      subsections: [
-        "3.1 Research Design",
-        "3.2 Population of the Study",
-        "3.3 Sample Size Determination (Taro Yamane)",
-        "3.4 Sampling Technique",
-        "3.5 Research Instrument & Validation",
-        "3.6 Methods of Data Analysis"
-      ],
-      content: `3.1 Research Design\nThis study adopts an explanatory cross-sectional survey research design. This approach allows the researcher to capture quantitative metrics across banking professionals and account holders simultaneously while establishing causal relationships.\n\n3.2 Population and Sample Size\nThe target population consists of 1,450 operations, risk, and IT personnel across five selected Tier-1 commercial banks situated within Lagos Island and Victoria Island financial corridors.\n\nApplying Taro Yamane's sample size determination formula:\nn = N / [1 + N(e)^2]\nWhere N = 1,450 and margin of error e = 0.05:\nn = 1450 / [1 + 1450(0.0025)] = 313.5 ≈ 314 respondents.\n\nA stratified random sampling technique was utilized to guarantee proportional representation across risk management, customer care, and software engineering departments.`
-    },
-    4: {
-      title: "Chapter Four: Data Presentation and Analysis",
-      progress: 30,
-      subsections: [
-        "4.1 Response Rate of Administered Questionnaires",
-        "4.2 Demographic Profile of Respondents",
-        "4.3 Hypothesis Testing (Multiple Regression)",
-        "4.4 Discussion of Findings"
-      ],
-      content: `4.1 Demographic & Response Analysis\nOut of 314 structured questionnaires administered across Access Bank, Zenith Bank, GTBank, First Bank, and UBA, 298 copies were correctly retrieved and deemed valid for econometric analysis, representing a 94.9% response rate.\n\n4.2 Hypothesis Testing\nMultiple linear regression conducted via SPSS v28 indicated that algorithmic fraud surveillance (β = 0.412, p < 0.001) and AI-driven credit scoring (β = 0.384, p < 0.01) exert statistically significant positive effects on banking operational efficiency, accounting for 62.4% of the variance (R² = 0.624).`
-    },
-    5: {
-      title: "Chapter Five: Summary, Conclusion & Recommendations",
-      progress: 20,
-      subsections: [
-        "5.1 Summary of Major Findings",
-        "5.2 Conclusion",
-        "5.3 Policy Recommendations",
-        "5.4 Contributions to Knowledge",
-        "5.5 Suggestions for Further Research",
-        "References"
-      ],
-      content: `5.1 Summary of Findings\nThe empirical outcomes demonstrate that AI-powered risk scoring significantly attenuates default rates while augmenting transaction volumes. However, infrastructural deficits and customer privacy apprehensions persist as major adoption bottlenecks.\n\n5.2 Recommendations\n1. Commercial banks should prioritize hybrid cloud configurations to mitigate local network downtime.\n2. The Central Bank of Nigeria should establish unambiguous ethical AI guidelines prioritizing transparency and anti-bias algorithmic audits.`
-    }
-  },
-  supervisorNotes: [
-    {
-      id: "sn_1",
-      chapter: 1,
-      date: "Oct 19, 2026",
-      text: "Expand the rationale in Section 1.2. Cite the latest 2023 NDPA regulations regarding customer biometric consent.",
-      resolved: true
-    },
-    {
-      id: "sn_2",
-      chapter: 3,
-      date: "Oct 22, 2026",
-      text: "Justify why Taro Yamane formula was selected over Cochran's formula for this finite population.",
-      resolved: false
-    }
-  ]
-};
+import { buildDocxBlob, buildPrintableHtml, manuscriptFileName } from "../lib/export-manuscript";
+import { formatReference } from "../lib/references";
+import { CHAPTER_STRUCTURES, buildChapters, exportWarnings } from "../lib/nigerian-format";
 
 const EMPTY_PROJECT = {
-  ...DEFAULT_PROJECT,
   id: "",
   title: "",
   shortTitle: "",
@@ -114,12 +19,11 @@ const EMPTY_PROJECT = {
   citationStyle: "APA 7th Edition",
   supervisor: "",
   targetDate: "",
-  chapters: Object.fromEntries(
-    Object.entries(DEFAULT_PROJECT.chapters).map(([number, chapter]) => [
-      number,
-      { ...chapter, progress: 0, subsections: [], content: "" }
-    ])
-  ),
+  projectType: "empirical",
+  chapters: buildChapters("standard"),
+  frontMatter: {},
+  appendices: "",
+  references: [],
   supervisorNotes: []
 };
 
@@ -142,6 +46,13 @@ export default function Home() {
   const [refinementRequest, setRefinementRequest] = useState("");
   const [generatedImages, setGeneratedImages] = useState({});
   const [imageLoadingIndex, setImageLoadingIndex] = useState(null);
+  const [isOutlineLoading, setIsOutlineLoading] = useState(false);
+  const [isAbstractLoading, setIsAbstractLoading] = useState(false);
+  const [newStructure, setNewStructure] = useState("standard");
+  const [sourceQuery, setSourceQuery] = useState("");
+  const [sourceResults, setSourceResults] = useState([]);
+  const [isSearchingSources, setIsSearchingSources] = useState(false);
+  const [sourceSearchError, setSourceSearchError] = useState("");
   const diagramPreviewRef = useRef(null);
 
   // New Project Form State
@@ -153,6 +64,8 @@ export default function Home() {
   const [newStudentName, setNewStudentName] = useState("");
   const [newMatricNumber, setNewMatricNumber] = useState("");
   const [newFaculty, setNewFaculty] = useState("");
+  const [newSupervisor, setNewSupervisor] = useState("");
+  const [newTargetDate, setNewTargetDate] = useState("");
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -245,12 +158,15 @@ export default function Home() {
 
   // Total project word count
   const totalWords = Object.values(project.chapters).reduce((acc, ch) => {
-    return acc + (ch.content ? ch.content.trim().split(/\s+/).filter(Boolean).length : 0);
+    return acc + countChapterWords(`${ch.title || ""}\n${ch.content || ""}`);
   }, 0);
 
   // Overall project completion %
+  const chaptersMeetingMinimum = Object.values(project.chapters).filter(
+    (chapter) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) >= 500
+  ).length;
   const overallProgress = Math.round(
-    Object.values(project.chapters).reduce((acc, ch) => acc + ch.progress, 0) / 5
+    (chaptersMeetingMinimum / Object.keys(project.chapters).length) * 100
   );
 
   // AI Assistant Actions
@@ -284,8 +200,16 @@ export default function Home() {
           },
           chapter: {
             number: currentChapter,
-            title: project.chapters[currentChapter]?.title
+            title: project.chapters[currentChapter]?.title,
+            sections: project.chapters[currentChapter]?.subsections || [],
+            totalChapters: Object.keys(project.chapters).length
           },
+          projectType: project.projectType || "empirical",
+          references: approvedReferences.map((reference) => ({
+            citation: formatReference(reference, project.citationStyle),
+            abstract: reference.abstract
+          })),
+          findings: project.findings || "",
           guideline: projectContext.guideline,
           sources: projectContext.sources,
           draft: actionType === "refine" ? editorText : "",
@@ -330,6 +254,106 @@ export default function Home() {
     }
   };
 
+  const persistProject = (updatedProject) => {
+    setProject(updatedProject);
+    try {
+      localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
+      setSaveStatus("Saved to local browser storage");
+    } catch {
+      setSaveStatus("Browser storage is full; changes are not saved locally");
+    }
+  };
+
+  const buildOutlineFromGuideline = async () => {
+    if (!projectContext?.guideline) {
+      setAiFeedback("Upload a department guideline by starting a new project first.");
+      return;
+    }
+    if (!allowAiProcessing) {
+      setAiFeedback("Please confirm that you want your guideline sent to Gemini before building the outline.");
+      return;
+    }
+    setIsOutlineLoading(true);
+    setAiFeedback("");
+    try {
+      const response = await fetch("/api/generate-outline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          guideline: projectContext.guideline,
+          project: { title: project.title, department: project.department, degree: project.degree },
+          consent: allowAiProcessing
+        })
+      });
+      const outline = await response.json();
+      if (!response.ok) throw new Error(outline.error || "Outline extraction failed.");
+
+      const existing = project.chapters;
+      const dropped = Object.keys(existing).filter(
+        (number) => Number(number) > outline.chapters.length && existing[number].content?.trim()
+      );
+      if (dropped.length > 0 && !window.confirm(`The guideline has ${outline.chapters.length} chapters. Existing text in chapter(s) ${dropped.join(", ")} will be removed. Continue?`)) {
+        return;
+      }
+
+      const chapters = Object.fromEntries(
+        outline.chapters.map((chapter, index) => [
+          index + 1,
+          {
+            title: chapter.title,
+            subsections: chapter.sections,
+            content: existing[index + 1]?.content || "",
+            progress: existing[index + 1]?.progress || 0
+          }
+        ])
+      );
+      persistProject({
+        ...project,
+        chapters,
+        projectType: outline.projectType,
+        preliminaryPages: outline.preliminaryPages,
+        endMatter: outline.endMatter,
+        formatting: outline.formatting
+      });
+      setCurrentChapter(1);
+      setAiFeedback(
+        `Outline built from your guideline: ${outline.chapters.length} chapters (${outline.projectType} project). Review the section headings in the sidebar.`
+      );
+    } catch (error) {
+      setAiFeedback(error.message || "Outline extraction failed.");
+    } finally {
+      setIsOutlineLoading(false);
+    }
+  };
+
+  const setProjectType = (projectType) => persistProject({ ...project, projectType });
+
+  const searchSources = async (event) => {
+    event.preventDefault();
+    setSourceSearchError("");
+    setIsSearchingSources(true);
+    try {
+      const response = await fetch(`/api/find-sources?q=${encodeURIComponent(sourceQuery)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Source search failed.");
+      setSourceResults(data.results);
+      if (data.results.length === 0) setSourceSearchError("No matching scholarly works found. Try different keywords.");
+    } catch (error) {
+      setSourceSearchError(error.message);
+    } finally {
+      setIsSearchingSources(false);
+    }
+  };
+
+  const approvedReferences = project.references || [];
+  const addReference = (work) => {
+    if (approvedReferences.some((reference) => reference.doi === work.doi)) return;
+    persistProject({ ...project, references: [...approvedReferences, work] });
+  };
+  const removeReference = (doi) =>
+    persistProject({ ...project, references: approvedReferences.filter((reference) => reference.doi !== doi) });
+  const setFindings = (findings) => persistProject({ ...project, findings });
+
   const generateImage = async (visual, index) => {
     if (!allowAiProcessing) {
       setAiFeedback("Confirm AI processing before generating a project image.");
@@ -355,87 +379,103 @@ export default function Home() {
     }
   };
 
-  // Export to Word Document (.doc format compatible with MS Word)
-  const handleExportWord = () => {
+  const setFrontMatter = (key, value) =>
+    persistProject({ ...project, frontMatter: { ...(project.frontMatter || {}), [key]: value } });
+
+  const generateAbstract = async () => {
+    if (!allowAiProcessing) {
+      setAiFeedback("Please confirm that you want your chapters sent to Gemini before generating the abstract.");
+      return;
+    }
+    const chapters = Object.values(project.chapters).filter((chapter) => chapter.content?.trim());
+    if (chapters.length === 0) {
+      setAiFeedback("Write your chapters first; the abstract summarises them.");
+      return;
+    }
+    setIsAbstractLoading(true);
+    setAiFeedback("");
+    try {
+      const response = await fetch("/api/generate-abstract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project: { title: project.title, projectType: project.projectType },
+          chapters: chapters.map((chapter) => ({ title: chapter.title, content: chapter.content })),
+          consent: allowAiProcessing
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Abstract generation failed.");
+      setFrontMatter("abstract", result.abstract);
+      setAiFeedback("Abstract drafted from your chapters. Review and edit it before submission.");
+    } catch (error) {
+      setAiFeedback(error.message || "Abstract generation failed.");
+    } finally {
+      setIsAbstractLoading(false);
+    }
+  };
+
+  const checkExportReady = () => {
+    if (!project.id) {
+      setActiveView("dashboard");
+      return false;
+    }
     const chaptersBelowMinimum = Object.entries(project.chapters)
       .filter(([, chapter]) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) < 500)
       .map(([number]) => Number(number));
     if (chaptersBelowMinimum.length > 0) {
-      const firstIncomplete = chaptersBelowMinimum[0];
-      setCurrentChapter(firstIncomplete);
+      setCurrentChapter(chaptersBelowMinimum[0]);
       setActiveView("studio");
       setAiFeedback(
         `Complete every chapter to at least 500 words before export. Chapters below the minimum: ${chaptersBelowMinimum.join(", ")}.`
       );
+      return false;
+    }
+    const unresolved = Object.values(project.chapters).reduce(
+      (count, chapter) => count + (chapter.content?.match(/\[(?:PROJECT DETAIL NEEDED|SOURCE NEEDED)[^\]]*\]/g)?.length || 0),
+      0
+    );
+    const warnings = exportWarnings(project);
+    if (unresolved > 0) {
+      warnings.push(`${unresolved} placeholder(s) such as [PROJECT DETAIL NEEDED] or [SOURCE NEEDED] are still in your text.`);
+    }
+    if (warnings.length > 0 && !window.confirm(`Before exporting:\n\n• ${warnings.join("\n• ")}\n\nExport anyway?`)) {
+      return false;
+    }
+    return true;
+  };
+
+  const handleExportWord = async () => {
+    if (!checkExportReady()) return;
+
+    try {
+      const blob = await buildDocxBlob(project);
+      const url = URL.createObjectURL(blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = url;
+      downloadLink.download = `${manuscriptFileName(project)}.docx`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setAiFeedback(`Could not create the DOCX file: ${error.message}`);
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (!checkExportReady()) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setAiFeedback("Allow pop-ups for this page, then choose Export PDF again.");
       return;
     }
-
-    const escapeHtml = (value) =>
-      String(value ?? "").replace(/[&<>"']/g, (character) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-      })[character]);
-
-    const docContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset='utf-8'>
-        <title>${escapeHtml(project.title)}</title>
-        <style>
-          body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; margin: 1in; }
-          h1 { text-align: center; font-size: 16pt; font-weight: bold; text-transform: uppercase; margin-bottom: 24pt; }
-          h2 { font-size: 14pt; font-weight: bold; margin-top: 18pt; margin-bottom: 12pt; }
-          p { text-align: justify; text-indent: 0.5in; margin-bottom: 12pt; }
-          .title-page { text-align: center; page-break-after: always; padding-top: 100pt; }
-        </style>
-      </head>
-      <body>
-        <div class="title-page">
-          <h1>${escapeHtml(project.title)}</h1>
-          <br><br>
-          <p style="text-align: center; text-indent: 0;">BY</p>
-          <p style="text-align: center; font-weight: bold; text-indent: 0;">${[project.studentName, project.matricNumber && `(${project.matricNumber})`].filter(Boolean).map(escapeHtml).join(" ")}</p>
-          <br><br>
-          <p style="text-align: center; text-indent: 0;">A RESEARCH PROJECT SUBMITTED TO THE DEPARTMENT OF ${escapeHtml(project.department.toUpperCase())}<br>
-          ${project.faculty ? `FACULTY OF ${escapeHtml(project.faculty.toUpperCase())}<br>` : ""}
-          ${escapeHtml(project.institution.toUpperCase())}</p>
-          <br><br>
-          <p style="text-align: center; text-indent: 0;">IN PARTIAL FULFILLMENT OF THE REQUIREMENTS FOR THE AWARD OF THE DEGREE OF ${project.degree.toUpperCase()}</p>
-          <br><br>
-          <p style="text-align: center; text-indent: 0;">SUPERVISOR: ${project.supervisor}</p>
-          <p style="text-align: center; text-indent: 0;">${project.targetDate}</p>
-        </div>
-
-        ${Object.keys(project.chapters)
-          .map(
-            (num) => `
-          <div>
-            <h1>${escapeHtml(project.chapters[num].title)}</h1>
-            ${project.chapters[num].content
-              .split("\n\n")
-              .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
-              .join("")}
-          </div>
-          <br style="page-break-before:always;" />
-        `
-          )
-          .join("")}
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", docContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const downloadLink = document.createElement("a");
-    downloadLink.href = url;
-    downloadLink.download = `${project.shortTitle.replace(/[^a-zA-Z0-9]/g, "_")}_Manuscript.doc`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(url);
+    printWindow.document.open();
+    printWindow.document.write(buildPrintableHtml(project));
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = () => printWindow.print();
+    setTimeout(() => printWindow.print(), 500);
   };
 
   // Create Project Flow
@@ -470,20 +510,15 @@ export default function Home() {
         studentName: newStudentName.trim(),
         matricNumber: newMatricNumber.trim(),
         faculty: newFaculty.trim(),
-        supervisor: "",
-        targetDate: "",
+        supervisor: newSupervisor.trim(),
+        targetDate: newTargetDate,
         supervisorNotes: [],
         department: newDept,
         degree: newDegree,
         institution: newInstitution,
         citationStyle: newCitation,
         projectContext,
-        chapters: Object.fromEntries(
-          Object.entries(EMPTY_PROJECT.chapters).map(([number, chapter]) => [
-            number,
-            { ...chapter, progress: 0, subsections: [], content: "" }
-          ])
-        )
+        chapters: buildChapters(newStructure)
       };
 
       const handleSourceFilesChange = (event) => {
@@ -954,7 +989,7 @@ export default function Home() {
                   className="btn btn-secondary btn-lg"
                   onClick={() => setActiveView("dashboard")}
                 >
-                  View Sample Dashboard
+                    Open Student Dashboard
                 </button>
               </div>
             </div>
@@ -1026,6 +1061,18 @@ export default function Home() {
       {activeView === "dashboard" && (
         <main className="dashboard-wrapper">
           <div className="container">
+            {!project.id ? (
+              <div className="glass-card" style={{ maxWidth: "720px", margin: "64px auto", padding: "36px", textAlign: "center" }}>
+                <h1 style={{ color: "#ffffff", marginBottom: "12px" }}>Start with your project details</h1>
+                <p style={{ color: "var(--text-secondary)", marginBottom: "24px" }}>
+                  Your dashboard will show your chapters, writing progress, supervisor feedback, and submission details after you create a project.
+                </p>
+                <button className="btn btn-primary" onClick={() => setIsNewProjectModalOpen(true)}>
+                  Set Up a Project
+                </button>
+              </div>
+            ) : (
+              <>
             <div className="dashboard-header">
               <div className="dashboard-greeting">
                 <div className="badge badge-cyan" style={{ marginBottom: "8px" }}>
@@ -1044,7 +1091,10 @@ export default function Home() {
                     <polyline points="7 10 12 15 17 10"></polyline>
                     <line x1="12" y1="15" x2="12" y2="3"></line>
                   </svg>
-                  <span>Export Full Project (.doc)</span>
+                  <span>Export Full Project (.docx)</span>
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportPdf}>
+                  <span>Export PDF</span>
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={() => setActiveView("studio")}>
                   <span>Continue Writing →</span>
@@ -1060,7 +1110,7 @@ export default function Home() {
                   {totalWords.toLocaleString()} <span style={{ fontSize: "0.9rem", color: "var(--violet-400)" }}>words</span>
                 </div>
                 <div style={{ fontSize: "0.78rem", color: "var(--emerald-400)", marginTop: "4px" }}>
-                  Target: 15,000 words
+                  Counted across your saved chapters
                 </div>
               </div>
 
@@ -1070,7 +1120,7 @@ export default function Home() {
                   {overallProgress}%
                 </div>
                 <div style={{ fontSize: "0.78rem", color: "var(--cyan-400)", marginTop: "4px" }}>
-                  3 of 5 chapters drafted
+                  {chaptersMeetingMinimum} of {Object.keys(project.chapters).length} chapters meet the 500-word minimum
                 </div>
               </div>
 
@@ -1131,6 +1181,8 @@ export default function Home() {
                 <div className="chapters-progress-list">
                   {Object.keys(project.chapters).map((num) => {
                     const ch = project.chapters[num];
+                    const chapterWords = countChapterWords(`${ch.title || ""}\n${ch.content || ""}`);
+                    const meetsMinimum = chapterWords >= 500;
                     return (
                       <div
                         key={num}
@@ -1145,22 +1197,15 @@ export default function Home() {
                             {ch.title}
                           </div>
                           <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                            {ch.subsections.length} Subsections •{" "}
-                            {ch.content.trim().split(/\s+/).filter(Boolean).length} words
+                            {chapterWords.toLocaleString()} words • {meetsMinimum ? "minimum met" : "below 500-word minimum"}
                           </div>
                         </div>
 
                         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
                           <span
-                            className={`badge ${
-                              ch.progress === 100
-                                ? "badge-emerald"
-                                : ch.progress > 40
-                                ? "badge-cyan"
-                                : "badge-violet"
-                            }`}
+                            className={`badge ${meetsMinimum ? "badge-emerald" : "badge-violet"}`}
                           >
-                            {ch.progress}%
+                            {meetsMinimum ? "Ready for review" : "In progress"}
                           </span>
                           <button className="btn btn-ghost btn-sm" style={{ padding: "4px 8px" }}>
                             Edit →
@@ -1238,7 +1283,10 @@ export default function Home() {
                       Open Chapter Studio
                     </button>
                     <button className="btn btn-secondary btn-sm" onClick={handleExportWord}>
-                      Download Word Manuscript (.doc)
+                      Download Word Manuscript (.docx)
+                    </button>
+                    <button className="btn btn-secondary btn-sm" onClick={handleExportPdf}>
+                      Export PDF
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
@@ -1250,6 +1298,8 @@ export default function Home() {
                 </div>
               </div>
             </div>
+              </>
+            )}
           </div>
         </main>
       )}
@@ -1275,7 +1325,7 @@ export default function Home() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {[1, 2, 3, 4, 5].map((num) => {
+              {Object.keys(project.chapters).map(Number).sort((a, b) => a - b).map((num) => {
                 const ch = project.chapters[num];
                 const isActive = currentChapter === num;
                 return (
@@ -1369,6 +1419,9 @@ export default function Home() {
                 <button className="btn btn-secondary btn-sm" onClick={handleExportWord}>
                   Export DOCX
                 </button>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportPdf}>
+                  Export PDF
+                </button>
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={() => {
@@ -1446,6 +1499,96 @@ export default function Home() {
               <button className="ai-tool-button" onClick={() => runAiAssist("refine")} disabled={isAiLoading || !editorText.trim()}>
                 <span>🔁</span> Refine Current Draft
               </button>
+            </div>
+
+            <div className="ai-card">
+              <h4>Project type and findings</h4>
+              <select
+                className="form-select"
+                value={project.projectType || "empirical"}
+                onChange={(e) => setProjectType(e.target.value)}
+                aria-label="Project type"
+              >
+                <option value="empirical">Empirical (data collected and analysed)</option>
+                <option value="non-empirical">Non-empirical (design, review, theoretical)</option>
+              </select>
+              <textarea
+                className="refinement-input"
+                rows="5"
+                value={project.findings || ""}
+                onChange={(e) => setFindings(e.target.value)}
+                placeholder={
+                  (project.projectType || "empirical") === "empirical"
+                    ? "Paste your real results: analysed tables, statistics, interview themes. Results chapters use only this text."
+                    : "Paste your real outputs: design decisions, system description, argument, or review conclusions."
+                }
+              />
+              <p className="visual-plan-note">The writer will not invent results. Anything missing here is marked for you to supply.</p>
+              <button className="btn btn-secondary btn-sm" onClick={buildOutlineFromGuideline} disabled={isOutlineLoading || !projectContext}>
+                {isOutlineLoading ? "Reading guideline..." : "Build outline from guideline"}
+              </button>
+            </div>
+
+            <div className="ai-card">
+              <h4>Front matter and appendices</h4>
+              <p className="visual-plan-note">Title page, declaration, certification, table of contents, lists of tables and figures (from &ldquo;Table 4.1 ...&rdquo; captions), and references are built automatically. Write the pages below in your own words; they appear in the export only when filled in.</p>
+              <label className="form-label" htmlFor="fm-dedication">Dedication (short, optional)</label>
+              <textarea id="fm-dedication" className="refinement-input" rows="2" value={project.frontMatter?.dedication || ""} onChange={(e) => setFrontMatter("dedication", e.target.value)} />
+              <label className="form-label" htmlFor="fm-ack">Acknowledgements (one page maximum)</label>
+              <textarea id="fm-ack" className="refinement-input" rows="4" value={project.frontMatter?.acknowledgements || ""} onChange={(e) => setFrontMatter("acknowledgements", e.target.value)} />
+              <label className="form-label" htmlFor="fm-abstract">Abstract (150&ndash;300 words; write it last)</label>
+              <textarea id="fm-abstract" className="refinement-input" rows="6" value={project.frontMatter?.abstract || ""} onChange={(e) => setFrontMatter("abstract", e.target.value)} />
+              <button className="btn btn-secondary btn-sm" onClick={generateAbstract} disabled={isAbstractLoading}>
+                {isAbstractLoading ? "Drafting abstract..." : "Draft abstract from my chapters"}
+              </button>
+              <label className="form-label" htmlFor="fm-abbr">List of abbreviations (optional)</label>
+              <textarea id="fm-abbr" className="refinement-input" rows="3" value={project.frontMatter?.abbreviations || ""} onChange={(e) => setFrontMatter("abbreviations", e.target.value)} />
+              <label className="form-label" htmlFor="appendices">Appendices (questionnaires, raw data, letters, code; start each with &ldquo;Appendix A&rdquo;)</label>
+              <textarea id="appendices" className="refinement-input" rows="4" value={project.appendices || ""} onChange={(e) => persistProject({ ...project, appendices: e.target.value })} />
+            </div>
+
+            <div className="ai-card">
+              <h4>Scholarly sources</h4>
+              <p className="visual-plan-note">Search a public scholarly index (OpenAlex). Only works you add are cited and listed in your references. Check each one before relying on it.</p>
+              <form onSubmit={searchSources} style={{ display: "flex", gap: "8px" }}>
+                <input
+                  className="form-input"
+                  value={sourceQuery}
+                  onChange={(e) => setSourceQuery(e.target.value)}
+                  placeholder="Topic keywords"
+                  aria-label="Search scholarly sources"
+                  minLength={3}
+                  required
+                />
+                <button className="btn btn-secondary btn-sm" type="submit" disabled={isSearchingSources}>
+                  {isSearchingSources ? "Searching..." : "Search"}
+                </button>
+              </form>
+              {sourceSearchError && <p className="form-error" role="alert">{sourceSearchError}</p>}
+              {sourceResults.map((work) => (
+                <div className="visual-plan-item" key={work.doi}>
+                  <strong>{work.title}</strong>
+                  <span>{formatReference(work, project.citationStyle)}</span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => addReference(work)}
+                    disabled={approvedReferences.some((reference) => reference.doi === work.doi)}
+                  >
+                    {approvedReferences.some((reference) => reference.doi === work.doi) ? "Added" : "Add to references"}
+                  </button>
+                </div>
+              ))}
+              {approvedReferences.length > 0 && (
+                <>
+                  <h4 style={{ marginTop: "12px" }}>Approved references ({approvedReferences.length})</h4>
+                  {approvedReferences.map((reference) => (
+                    <div className="visual-plan-item" key={reference.doi}>
+                      <span>{formatReference(reference, project.citationStyle)}</span>
+                      <button className="btn btn-ghost btn-sm" onClick={() => removeReference(reference.doi)}>Remove</button>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
 
             <div className="ai-card document-context-card">
@@ -1621,6 +1764,17 @@ export default function Home() {
                   </div>
                 </div>
 
+                <div className="student-details-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="project-supervisor">Supervisor (optional)</label>
+                    <input id="project-supervisor" className="form-input" value={newSupervisor} onChange={(e) => setNewSupervisor(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="project-target-date">Target submission date (optional)</label>
+                    <input id="project-target-date" className="form-input" type="date" value={newTargetDate} onChange={(e) => setNewTargetDate(e.target.value)} />
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Working Project Topic / Title</label>
                   <textarea
@@ -1631,32 +1785,6 @@ export default function Home() {
                     placeholder="e.g. Design and Implementation of an AI-Powered Fraud Detection System for Nigerian FinTech Startups"
                     required
                   />
-                  <div style={{ marginTop: "6px", display: "flex", gap: "8px" }}>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: "0.78rem", padding: "4px 8px" }}
-                      onClick={() =>
-                        setNewTitle(
-                          "Assessment of Cloud Computing Adoption on Operational Resilience in Nigerian Healthcare Facilities"
-                        )
-                      }
-                    >
-                      ✨ Suggest Healthcare Topic
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: "0.78rem", padding: "4px 8px" }}
-                      onClick={() =>
-                        setNewTitle(
-                          "Design and Development of an Offline-First Solar Energy Monitoring System for Rural Communities"
-                        )
-                      }
-                    >
-                      ✨ Suggest Engineering Topic
-                    </button>
-                  </div>
                 </div>
 
                 <div className="form-group document-upload-group">
@@ -1693,6 +1821,16 @@ export default function Home() {
                 </div>
 
                 {formError && <p className="form-error" role="alert">{formError}</p>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="chapter-structure">Chapter structure</label>
+                  <select id="chapter-structure" className="form-select" value={newStructure} onChange={(e) => setNewStructure(e.target.value)}>
+                    {Object.entries(CHAPTER_STRUCTURES).map(([key, structure]) => (
+                      <option key={key} value={key}>{structure.label}</option>
+                    ))}
+                  </select>
+                  <p className="upload-help">This is the common Nigerian format. Use &ldquo;Build outline from guideline&rdquo; in the studio to match your department handbook, which always takes priority.</p>
+                </div>
 
                 <div className="form-group">
                   <label className="form-label">Required Citation & Formatting Style</label>

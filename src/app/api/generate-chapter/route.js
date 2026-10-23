@@ -17,7 +17,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { project, chapter, guideline, sources, draft, feedback, consent } = body;
+    const { project, chapter, guideline, sources, draft, feedback, consent, projectType, findings, references } = body;
     if (consent !== true) {
       return Response.json({ error: "Confirm that you want project material sent to Gemini." }, { status: 400 });
     }
@@ -25,7 +25,7 @@ export async function POST(request) {
       !project?.title ||
       !Number.isInteger(chapter?.number) ||
       chapter.number < 1 ||
-      chapter.number > 5 ||
+      chapter.number > 12 ||
       typeof guideline !== "string" ||
       !Array.isArray(sources) ||
       sources.length === 0 ||
@@ -35,7 +35,7 @@ export async function POST(request) {
       return Response.json({ error: "Project guideline, source documents, and chapter details are required." }, { status: 400 });
     }
     const sourceCharacters = sources.reduce((sum, source) => sum + source.content.length, 0);
-    if (guideline.length > 18000 || sourceCharacters > 42000 || (draft?.length || 0) > 50000) {
+    if (guideline.length > 18000 || sourceCharacters > 42000 || (draft?.length || 0) > 50000 || (typeof findings === "string" ? findings.length : 0) > 30000) {
       return Response.json({ error: "The provided project context is too long. Reduce the uploaded material or draft and try again." }, { status: 413 });
     }
 
@@ -53,13 +53,24 @@ Requirements:
 - Follow the project's stated citation style when formatting citations, but never create references not present in the supplied documents.
 - Keep Nigerian university conventions and terminology where appropriate. Do not claim that one format applies to every university; follow the uploaded guideline.
 - Visuals must be relevant and academically useful. Suggest only figures genuinely supported by the project. Provide a concise generation prompt for an illustrative image only when useful; diagrams must represent the actual described project and should not invent components.
-- The student must review the draft, visual suggestions, and diagram before submission.`,
+- The student must review the draft, visual suggestions, and diagram before submission.
+- Use the section headings listed in chapter.sections as the chapter's headings, in order, when provided; otherwise follow the guideline. Put each heading on its own line, separated from paragraphs by blank lines.
+- Project type is given in projectType. Study results, statistics, tables, respondent numbers, and findings may come ONLY from studentFindings. If studentFindings is empty or silent on something a results/analysis/discussion section needs, write the section's framework and mark the gap with [PROJECT DETAIL NEEDED: what is required] instead of inventing numbers or outcomes. For non-empirical projects, never describe data collection or statistical results; base design, argument, or review content on the supplied materials and studentFindings.
+- Conclusion and recommendation sections must follow from the supplied materials and studentFindings only.
+- approvedReferences are scholarly works the student approved. You may cite them in the project's citation style (author surname and year) and may state only what their citation details and abstract support; never attribute findings beyond the abstract. Do not write a reference list: the app compiles it from the approved references. Cite no source outside the uploaded documents and approvedReferences.`,
       input: JSON.stringify({
         task: draft ? "Refine the existing chapter draft using the student's requested changes." : "Write a complete first draft of this project chapter.",
         project,
         chapter,
         departmentGuideline: guideline,
         projectSources: sources,
+        projectType: projectType === "non-empirical" ? "non-empirical" : "empirical",
+        approvedReferences: (Array.isArray(references) ? references : []).slice(0, 25).map((reference, index) => ({
+          id: `R${index + 1}`,
+          citation: typeof reference?.citation === "string" ? reference.citation.slice(0, 500) : "",
+          abstract: typeof reference?.abstract === "string" ? reference.abstract.slice(0, 1500) : ""
+        })),
+        studentFindings: typeof findings === "string" ? findings : "",
         existingDraft: draft || "",
         studentFeedback: feedback || ""
       }),
