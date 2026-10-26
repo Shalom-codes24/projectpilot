@@ -33,11 +33,18 @@ export async function POST(request) {
       sources.some((source) => typeof source.content !== "string" || typeof source.name !== "string")
     ) {
       return Response.json({ error: "Project guideline, source documents, and chapter details are required." }, { status: 400 });
+    const cleanGuideline = guideline.length > 60000 ? guideline.slice(0, 60000).trim() : guideline;
+    let cleanSources = sources;
+    const sourceCharacters = cleanSources.reduce((sum, source) => sum + source.content.length, 0);
+    if (sourceCharacters > 300000) {
+      const share = Math.floor(300000 / cleanSources.length);
+      cleanSources = cleanSources.map((s) => ({
+        ...s,
+        content: s.content.slice(0, share).trim()
+      }));
     }
-    const sourceCharacters = sources.reduce((sum, source) => sum + source.content.length, 0);
-    if (guideline.length > 60000 || sourceCharacters > 300000 || (draft?.length || 0) > 50000 || (typeof findings === "string" ? findings.length : 0) > 30000) {
-      return Response.json({ error: "The provided project context is too long. Reduce the uploaded material or draft and try again." }, { status: 413 });
-    }
+    const cleanDraft = (draft?.length || 0) > 50000 ? draft.slice(0, 50000) : draft;
+    const cleanFindings = (typeof findings === "string" && findings.length > 30000) ? findings.slice(0, 30000) : findings;
 
     const interaction = await gemini.interactions.create({
       model: GEMINI_TEXT_MODEL,
@@ -62,16 +69,16 @@ Requirements:
         task: draft ? "Refine the existing chapter draft using the student's requested changes." : "Write a complete first draft of this project chapter.",
         project,
         chapter,
-        departmentGuideline: guideline,
-        projectSources: sources,
+        departmentGuideline: cleanGuideline,
+        projectSources: cleanSources,
         projectType: projectType === "non-empirical" ? "non-empirical" : "empirical",
         approvedReferences: (Array.isArray(references) ? references : []).slice(0, 25).map((reference, index) => ({
           id: `R${index + 1}`,
           citation: typeof reference?.citation === "string" ? reference.citation.slice(0, 500) : "",
           abstract: typeof reference?.abstract === "string" ? reference.abstract.slice(0, 1500) : ""
         })),
-        studentFindings: typeof findings === "string" ? findings : "",
-        existingDraft: draft || "",
+        studentFindings: cleanFindings || "",
+        existingDraft: cleanDraft || "",
         studentFeedback: feedback || ""
       }),
       response_format: {

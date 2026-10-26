@@ -11,9 +11,10 @@ export async function POST(request) {
     if (consent !== true) {
       return Response.json({ error: "Confirm that you want the guideline sent to Gemini." }, { status: 400 });
     }
-    if (typeof guideline !== "string" || !guideline.trim() ||     guideline.length > 60000) {
-          return Response.json({ error: "A guideline of up to 60,000 characters is required." }, { status: 400 });
+    if (typeof guideline !== "string" || !guideline.trim()) {
+      return Response.json({ error: "A department guideline is required." }, { status: 400 });
     }
+    const cleanGuideline = guideline.length > 60000 ? guideline.slice(0, 60000).trim() : guideline;
 
     const interaction = await gemini.interactions.create({
       model: GEMINI_TEXT_MODEL,
@@ -23,7 +24,7 @@ export async function POST(request) {
 - Return preliminary pages (e.g. title page, declaration, certification, dedication, acknowledgements, abstract, table of contents, lists) and end matter (references, appendices) only if the guideline requires them.
 - Report the project type the guideline implies: "empirical" if it expects collected data and analysis of results, otherwise "non-empirical" (e.g. design, review, theoretical, creative).
 - Report formatting rules stated in the guideline (font, size, line spacing, margins, citation style) as short strings; use an empty string when not stated.`,
-      input: JSON.stringify({ project, guideline }),
+      input: JSON.stringify({ project, guideline: cleanGuideline }),
       response_format: {
         type: "text",
         mime_type: "application/json",

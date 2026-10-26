@@ -46,6 +46,40 @@ async function extractText(file) {
   return normalized;
 }
 
+function shortenGuideline(text, maxChars = MAX_GUIDELINE_CHARS) {
+  if (text.length <= maxChars) return text;
+  const sliced = text.slice(0, maxChars);
+  const lastNewline = sliced.lastIndexOf("\n");
+  if (lastNewline > maxChars * 0.9) {
+    return sliced.slice(0, lastNewline).trim();
+  }
+  return sliced.trim();
+}
+
+function shortenSourcesCombined(sources, maxCombinedChars = MAX_SOURCE_CHARS) {
+  const total = sources.reduce((sum, s) => sum + s.content.length, 0);
+  if (total <= maxCombinedChars) return sources;
+
+  const items = sources.map((s, idx) => ({ idx, name: s.name, content: s.content, len: s.content.length }));
+  items.sort((a, b) => a.len - b.len);
+
+  let remainingBudget = maxCombinedChars;
+  for (let i = 0; i < items.length; i++) {
+    const remainingCount = items.length - i;
+    const share = Math.floor(remainingBudget / remainingCount);
+    if (items[i].len > share) {
+      const sliced = items[i].content.slice(0, share);
+      const lastNewline = sliced.lastIndexOf("\n");
+      items[i].content = (lastNewline > share * 0.9 ? sliced.slice(0, lastNewline) : sliced).trim();
+      items[i].len = items[i].content.length;
+    }
+    remainingBudget -= items[i].len;
+  }
+
+  items.sort((a, b) => a.idx - b.idx);
+  return items.map(({ name, content }) => ({ name, content }));
+}
+
 export async function POST(request) {
   try {
     const requestBytes = Number(request.headers.get("content-length"));
@@ -71,18 +105,13 @@ export async function POST(request) {
       return Response.json({ error: "The combined document size must not exceed 25 MB." }, { status: 413 });
     }
 
-    const guideline = await extractText(guidelineFile);
-    const sources = await Promise.all(
+    const rawGuideline = await extractText(guidelineFile);
+    const rawSources = await Promise.all(
       sourceFiles.map(async (file) => ({ name: file.name, content: await extractText(file) }))
     );
-    const sourceCharacters = sources.reduce((total, source) => total + source.content.length, 0);
 
-    if (guideline.length > MAX_GUIDELINE_CHARS || sourceCharacters > MAX_SOURCE_CHARS) {
-      return Response.json(
-        { error: "The extracted documents are too long. Shorten the guideline to 60,000 characters and project sources to 300,000 characters combined." },
-        { status: 413 }
-      );
-    }
+    const guideline = shortenGuideline(rawGuideline, MAX_GUIDELINE_CHARS);
+    const sources = shortenSourcesCombined(rawSources, MAX_SOURCE_CHARS);
 
     return Response.json({
       guideline,

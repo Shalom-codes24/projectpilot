@@ -538,7 +538,21 @@ export default function Home() {
       try {
         localStorage.setItem("projectpilot_project", JSON.stringify(newPrj));
       } catch {
-        throw new Error("Project documents exceed available browser storage. Try smaller files.");
+        try {
+          const compactPrj = {
+            ...newPrj,
+            projectContext: {
+              ...projectContext,
+              sources: projectContext.sources.map((s) => ({
+                name: s.name,
+                content: s.content.slice(0, 30000)
+              }))
+            }
+          };
+          localStorage.setItem("projectpilot_project", JSON.stringify(compactPrj));
+        } catch {
+          console.warn("Storage quota reached; keeping active project in memory.");
+        }
       }
 
       setProject(newPrj);
