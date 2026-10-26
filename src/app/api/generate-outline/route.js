@@ -64,9 +64,19 @@ export async function POST(request) {
     clientKey
   );
 
+    let rawText = (interaction.output_text || "").trim();
+    if (rawText.startsWith("```")) {
+      rawText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    }
+    const firstBrace = rawText.indexOf("{");
+    const lastBrace = rawText.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      rawText = rawText.slice(firstBrace, lastBrace + 1);
+    }
+
     let outline;
     try {
-      outline = JSON.parse(interaction.output_text);
+      outline = JSON.parse(rawText);
     } catch {
       return Response.json({ error: "Gemini returned an unreadable outline. Please try again." }, { status: 502 });
     }

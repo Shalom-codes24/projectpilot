@@ -1,6 +1,80 @@
 import { countChapterWords } from "../../../lib/word-count";
 import { GEMINI_TEXT_MODEL, executeWithKeyRotation } from "../../../lib/gemini";
 
+function cleanAndParseJson(text) {
+  if (typeof text !== "string") return null;
+
+  let cleaned = text.trim();
+
+  // 1. Remove markdown code block markers if present
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  }
+
+  // 2. Try direct JSON.parse
+  try {
+    return JSON.parse(cleaned);
+  } catch (e1) {
+    // 3. Find outermost braces { ... }
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const slice = cleaned.slice(firstBrace, lastBrace + 1);
+      try {
+        return JSON.parse(slice);
+      } catch (e2) {}
+    }
+
+    // 4. Handle truncated or unescaped JSON by extracting fields
+    try {
+      const contentMatch = cleaned.match(/"content"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"(?:visuals|diagram)"|"\s*}|$)/);
+      if (contentMatch && contentMatch[1]) {
+        const rawContent = contentMatch[1]
+          .replace(/\\n/g, "\n")
+          .replace(/\\r/g, "\r")
+          .replace(/\\t/g, "\t")
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, "\\");
+
+        let diagram = "";
+        const diagMatch = cleaned.match(/"diagram"\s*:\s*"([\s\S]*?)(?:"|$)/);
+        if (diagMatch && diagMatch[1]) {
+          diagram = diagMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+        }
+
+        let visuals = [];
+        const visualsMatch = cleaned.match(/"visuals"\s*:\s*(\[[\s\S]*?\])/);
+        if (visualsMatch) {
+          try { visuals = JSON.parse(visualsMatch[1]); } catch {}
+        }
+
+        if (rawContent.trim().length > 20) {
+          return {
+            content: rawContent.trim(),
+            visuals,
+            diagram
+          };
+        }
+      }
+    } catch (e3) {}
+
+    // 5. Attempt auto-closing quotes and braces for cut-off JSON
+    try {
+      let autoClosed = cleaned;
+      if (!autoClosed.endsWith("}")) {
+        const quotes = (autoClosed.match(/(?<!\\)"/g) || []).length;
+        if (quotes % 2 !== 0) autoClosed += '"';
+        if (!autoClosed.includes('"visuals"')) autoClosed += ', "visuals": []';
+        if (!autoClosed.includes('"diagram"')) autoClosed += ', "diagram": ""';
+        autoClosed += "}";
+        return JSON.parse(autoClosed);
+      }
+    } catch (e4) {}
+
+    throw e1;
+  }
+}
+
 export async function POST(request) {
   const requestBytes = Number(request.headers.get("content-length"));
   if (Number.isFinite(requestBytes) && requestBytes > 1.5 * 1024 * 1024) {
@@ -108,7 +182,7 @@ Requirements:
       },
       generation_config: {
         temperature: 0.4,
-        max_output_tokens: 4000
+        max_output_tokens: 8000
       }
     }),
     clientKey
@@ -118,14 +192,22 @@ Requirements:
       return Response.json({ error: "Gemini returned an empty chapter. Try again." }, { status: 502 });
     }
 
-    let chapterResult;
-    try {
-      chapterResult = JSON.parse(content);
-    } catch {
-      return Response.json({ error: "Gemini returned an unreadable draft. Please try again." }, { status: 502 });
-    }
-    if (typeof chapterResult.content !== "string" || !Array.isArray(chapterResult.visuals)) {
-      return Response.json({ error: "Gemini returned an incomplete chapter response. Please try again." }, { status: 502 });
+    let chapterResult = cleanAndParseJson(content);
+    if (!chapterResult || typeof chapterResult.content !== "string") {
+      // Fallback: If JSON wrapper was severely corrupted, treat entire text as chapter content
+      const fallbackContent = content
+        .replace(/^```(?:json|markdown)?/i, "")
+        .replace(/```$/, "")
+        .trim();
+      if (fallbackContent.length > 100) {
+        chapterResult = {
+          content: fallbackContent,
+          visuals: [],
+          diagram: ""
+        };
+      } else {
+        return Response.json({ error: "Gemini returned an unreadable draft. Please try again." }, { status: 502 });
+      }
     }
 
     const wordCount = countChapterWords(`${chapter.title || ""}\n${chapterResult.content}`);
