@@ -1,12 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
+import fs from "fs";
+import path from "path";
 
 export const GEMINI_TEXT_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 export const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-nano-banana-2.1";
 
 let currentKeyIndex = 0;
-// Map of apiKey -> timestamp until when it is considered exhausted
-const exhaustedKeyCooldowns = new Map();
-const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
  * Returns a list of all configured Gemini API keys from environment and optional client header.
@@ -21,25 +20,25 @@ export function getGeminiKeysPool(headerKey = null) {
     if (numberedKey) rawList.push(numberedKey);
   }
 
-  // Also read .env.local if running in Node environment to pick up any raw multi-line entries
+  // Also read .env.local directly to pick up all keys reliably
   try {
-    if (typeof process !== "undefined" && process.cwd) {
-      const fs = require("fs");
-      const path = require("path");
-      const envPath = path.join(process.cwd(), ".env.local");
-      if (fs.existsSync(envPath)) {
-        const fileContent = fs.readFileSync(envPath, "utf8");
-        const lines = fileContent.split(/\r?\n/);
-        for (const line of lines) {
-          const match = line.match(/^GEMINI_API_KEY(_\d+)?\s*=\s*(.+)$/);
-          if (match && match[2]) {
-            rawList.push(match[2].trim());
+    const envPath = path.join(process.cwd(), ".env.local");
+    if (fs.existsSync(envPath)) {
+      const fileContent = fs.readFileSync(envPath, "utf8");
+      const lines = fileContent.split(/\r?\n/);
+      for (const line of lines) {
+        const match = line.match(/^GEMINI_API_KEY(_\d+)?\s*=\s*(.+)$/);
+        if (match && match[2]) {
+          const val = match[2].trim();
+          for (const piece of val.split(",")) {
+            const cleanPiece = piece.trim();
+            if (cleanPiece.length > 5) rawList.push(cleanPiece);
           }
         }
       }
     }
   } catch (err) {
-    // ignore filesystem errors if client/edge
+    // ignore filesystem errors if any
   }
 
   const envRaw = rawList.filter(Boolean).join(",");
@@ -64,23 +63,18 @@ export function getGeminiKeysPool(headerKey = null) {
  */
 export function getKeysStatus(headerKey = null) {
   const keys = getGeminiKeysPool(headerKey);
-  const now = Date.now();
   const activeIdx = keys.length > 0 ? currentKeyIndex % keys.length : 0;
 
   return {
     totalKeys: keys.length,
     activeKeyIndex: activeIdx,
     model: GEMINI_TEXT_MODEL,
-    keys: keys.map((key, index) => {
-      const cooldownUntil = exhaustedKeyCooldowns.get(key) || 0;
-      const isExhausted = cooldownUntil > now;
-      return {
-        index: index + 1,
-        preview: key.length > 12 ? `${key.slice(0, 7)}...${key.slice(-5)}` : "Key configured",
-        isActive: index === activeIdx && !isExhausted,
-        status: isExhausted ? "quota_paused" : (index === activeIdx ? "active" : "standby")
-      };
-    })
+    keys: keys.map((key, index) => ({
+      index: index + 1,
+      preview: key.length > 12 ? `${key.slice(0, 7)}...${key.slice(-5)}` : "Key configured",
+      isActive: index === activeIdx,
+      status: index === activeIdx ? "active" : "standby"
+    }))
   };
 }
 
@@ -106,16 +100,16 @@ function isRateLimitError(error) {
     msg.includes("429") ||
     msg.includes("quota") ||
     msg.includes("rate limit") ||
+    msg.includes("rate-limit") ||
     msg.includes("too many requests") ||
     msg.includes("resource_exhausted") ||
-    msg.includes("exceeded your current quota") ||
-    msg.includes("limit")
+    msg.includes("exceeded your current quota")
   );
 }
 
 /**
  * Executes an AI operation with automatic failover rotation through the pool of configured keys.
- * Fast-skips known exhausted keys to eliminate the 35-second Google client retry hang.
+ * Tries every unique key in order starting from the active key, ensuring zero skipped keys.
  */
 export async function executeWithKeyRotation(taskFn, headerKey = null) {
   const keys = getGeminiKeysPool(headerKey);
@@ -123,43 +117,50 @@ export async function executeWithKeyRotation(taskFn, headerKey = null) {
     throw new Error("AI is not configured. Add GEMINI_API_KEY to .env.local and restart the app.");
   }
 
-  const now = Date.now();
-  // Filter available healthy keys first (not currently in quota cooldown)
-  const healthyKeys = keys.filter((k) => (exhaustedKeyCooldowns.get(k) || 0) <= now);
-  const candidateKeys = healthyKeys.length > 0 ? healthyKeys : keys; // fallback to all if all on cooldown
+  const totalKeys = keys.length;
+  const startIndex = currentKeyIndex % totalKeys;
+
+  // Build a deterministic list of keys to try in order, exactly once each
+  const orderedKeys = [];
+  for (let i = 0; i < totalKeys; i++) {
+    orderedKeys.push(keys[(startIndex + i) % totalKeys]);
+  }
 
   let lastError = null;
 
-  for (let attempt = 0; attempt < candidateKeys.length; attempt++) {
-    const apiKey = candidateKeys[(currentKeyIndex + attempt) % candidateKeys.length];
-    const keyGlobalIndex = keys.indexOf(apiKey);
+  for (let i = 0; i < orderedKeys.length; i++) {
+    const apiKey = orderedKeys[i];
+    const keyIndex = keys.indexOf(apiKey);
     const client = new GoogleGenAI({ apiKey });
 
     try {
-      const result = await taskFn(client, apiKey, keyGlobalIndex);
-      // Success! Remember this key as active and clear any cooldown
-      exhaustedKeyCooldowns.delete(apiKey);
-      currentKeyIndex = keyGlobalIndex >= 0 ? keyGlobalIndex : 0;
+      const result = await taskFn(client, apiKey, keyIndex);
+      // Key succeeded! Update current active key to this working key
+      currentKeyIndex = keyIndex;
       return result;
     } catch (error) {
       lastError = error;
-      if (isRateLimitError(error)) {
-        // Mark this key in cooldown so subsequent requests don't waste 35s on it
-        exhaustedKeyCooldowns.set(apiKey, Date.now() + COOLDOWN_MS);
-        const nextIdx = (keyGlobalIndex + 1) % keys.length;
-        console.warn(
-          `[Gemini Auto-Failover] Key #${keyGlobalIndex + 1} reached quota/rate-limit. Marking in 10m cooldown. Switching to backup key #${nextIdx + 1}...`
-        );
-        currentKeyIndex = nextIdx;
+      const isFailoverCandidate = isRateLimitError(error) || error.status === 429 || error.status === 503;
+      console.warn(
+        `[Gemini Auto-Failover] Key #${keyIndex + 1} (${apiKey.slice(0, 8)}...) failed (status=${error.status || 'unknown'}, msg=${error.message}). Attempt ${i + 1} of ${orderedKeys.length}.`
+      );
+
+      if (isFailoverCandidate && i < orderedKeys.length - 1) {
+        const nextKey = orderedKeys[i + 1];
+        const nextIndex = keys.indexOf(nextKey);
+        console.log(`[Gemini Auto-Failover] Switching immediately to Key #${nextIndex + 1}...`);
         continue;
       }
-      throw error;
+
+      // If not a failover candidate or it's the last key, rethrow with clear details
+      if (!isFailoverCandidate) {
+        throw error;
+      }
     }
   }
 
-  const err = new Error(
-    `All ${keys.length} configured Gemini API keys exceeded writing/quota limits. Please wait a moment or add another backup key.`
-  );
+  const detailedMessage = lastError?.message || "All configured keys reached capacity.";
+  const err = new Error(`All ${keys.length} API keys failed. Latest issue: ${detailedMessage}`);
   err.status = 429;
   throw err;
 }
