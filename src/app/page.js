@@ -447,10 +447,17 @@ export default function Home() {
   const wordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${editorText}`);
   const readTime = Math.ceil(wordCount / 200);
 
-  // Total project word count
+  // Total project word count & 70+ Page Goal Estimator
+  // Standard academic formatting: 12pt Times New Roman, 1.5 line spacing ~280 words per page.
+  // Standard university preliminary pages (Title, Declaration, Certification, Dedication, Acknowledgements, Abstract, TOC, Lists): ~10 pages
   const totalWords = Object.values(project.chapters).reduce((acc, ch) => {
     return acc + countChapterWords(`${ch.title || ""}\n${ch.content || ""}`);
   }, 0);
+  const estimatedChapterPages = Math.round(totalWords / 280);
+  const estimatedPrelimPages = totalWords > 0 ? 10 : 0;
+  const estimatedTotalPages = estimatedChapterPages + estimatedPrelimPages;
+  const pageTarget = 70;
+  const pageProgressPercent = Math.min(100, Math.round((estimatedTotalPages / pageTarget) * 100));
 
   // Overall project completion %
   const chaptersMeetingMinimum = Object.values(project.chapters).filter(
@@ -462,16 +469,16 @@ export default function Home() {
 
   // AI Assistant Actions
   const runAiAssist = async (actionType) => {
-    if (actionType !== "generate" && actionType !== "refine") {
-      setAiFeedback("Choose chapter writing or draft refinement.");
+    if (actionType !== "generate" && actionType !== "expand" && actionType !== "refine") {
+      setAiFeedback("Choose full chapter writing, deep expansion, or custom refinement.");
       return;
     }
     if (!projectContext?.guideline || !projectContext?.sources?.length) {
-      setAiFeedback("Upload your department guideline and at least one project source document before generating a chapter.");
+      setAiFeedback("Upload your department guideline and at least one project source document before writing a chapter.");
       return;
     }
     if (!allowAiProcessing) {
-      setAiFeedback("Please confirm that you want your uploaded documents sent to Gemini for chapter writing or refinement.");
+      setAiFeedback("Please confirm that you want your uploaded documents sent to Gemini for chapter writing.");
       return;
     }
 
@@ -485,6 +492,7 @@ export default function Home() {
           ...(customApiKey ? { "x-gemini-api-key": customApiKey } : {})
         },
         body: JSON.stringify({
+          mode: actionType,
           project: {
             title: project.title,
             institution: project.institution,
@@ -506,8 +514,8 @@ export default function Home() {
           findings: project.findings || "",
           guideline: projectContext.guideline,
           sources: projectContext.sources,
-          draft: actionType === "refine" ? editorText : "",
-          feedback: actionType === "refine" ? refinementRequest : "",
+          draft: actionType === "generate" ? "" : editorText,
+          feedback: actionType === "refine" ? refinementRequest : (actionType === "expand" ? "Deepen literature, add multi-paragraph academic depth, analytical tables, and theoretical foundations to expand page count." : ""),
           consent: allowAiProcessing
         })
       });
@@ -523,7 +531,7 @@ export default function Home() {
 
       const generatedWordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${finalDraftContent}`);
       if (generatedWordCount < 500) {
-        throw new Error(`The generated draft contains ${generatedWordCount} words; at least 500 words are required. Please try again or provide more source details.`);
+        throw new Error(`The generated chapter contains ${generatedWordCount} words; at least 500 words are required. Please try again or provide more source details.`);
       }
       setEditorText(finalDraftContent);
       setVisualPlan(result.visuals || []);
@@ -535,7 +543,7 @@ export default function Home() {
           [currentChapter]: {
             ...project.chapters[currentChapter],
             content: finalDraftContent,
-            progress: Math.max(project.chapters[currentChapter]?.progress || 0, 25)
+            progress: Math.max(project.chapters[currentChapter]?.progress || 0, Math.min(100, Math.round((generatedWordCount / 2500) * 100)))
           }
         }
       };
@@ -547,11 +555,13 @@ export default function Home() {
       } catch {
         setSaveStatus("Browser storage is full; this draft is not saved locally");
       }
-      const meetsStandard = generatedWordCount >= 600;
+      const generatedPages = Math.max(1, Math.round(generatedWordCount / 280));
+      const newTotalWords = Object.entries(updatedProject.chapters).reduce((acc, [cNum, ch]) => {
+        return acc + countChapterWords(`${ch.title || ""}\n${ch.content || ""}`);
+      }, 0);
+      const newTotalPages = Math.round(newTotalWords / 280) + 10;
       setAiFeedback(
-        meetsStandard
-          ? `Draft created with ${generatedWordCount.toLocaleString()} words (meets 600+ word academic target). Review and edit it before submission. Citations are limited to your uploaded sources.`
-          : `Draft created with ${generatedWordCount.toLocaleString()} words. Review sections or use the ribbon tools to expand.`
+        `🎉 Chapter ${currentChapter} written in full (${generatedWordCount.toLocaleString()} words, ~${generatedPages} pages)! Current manuscript length: ~${newTotalPages} / 70+ page target.`
       );
       if (actionType === "refine") setRefinementRequest("");
     } catch (error) {
@@ -1458,14 +1468,32 @@ export default function Home() {
             </div>
 
             {/* DASHBOARD STATS ROW */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "20px", marginBottom: "32px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "20px", marginBottom: "32px" }}>
+              <div className="glass-card" style={{ padding: "20px", border: "1px solid rgba(139, 92, 246, 0.4)", background: "linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(255, 255, 255, 0.03))" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.85rem", color: "var(--violet-300)", fontWeight: "600" }}>📖 70+ Page Target</span>
+                  <span style={{ fontSize: "0.72rem", padding: "2px 8px", borderRadius: "10px", background: estimatedTotalPages >= 70 ? "rgba(16, 185, 129, 0.2)" : "rgba(139, 92, 246, 0.2)", color: estimatedTotalPages >= 70 ? "var(--emerald-400)" : "var(--violet-300)", fontWeight: "600" }}>
+                    {estimatedTotalPages >= 70 ? "Target Met! 🎉" : `${Math.max(0, 70 - estimatedTotalPages)} pgs to goal`}
+                  </span>
+                </div>
+                <div style={{ fontSize: "1.8rem", fontWeight: "800", color: "#ffffff", marginTop: "4px" }}>
+                  ~{estimatedTotalPages} <span style={{ fontSize: "0.95rem", color: "var(--text-muted)", fontWeight: "500" }}>/ 70+ pages</span>
+                </div>
+                <div style={{ width: "100%", height: "6px", background: "rgba(255, 255, 255, 0.1)", borderRadius: "3px", marginTop: "8px", overflow: "hidden" }}>
+                  <div style={{ width: `${pageProgressPercent}%`, height: "100%", background: "linear-gradient(90deg, var(--violet-500), var(--emerald-400))", borderRadius: "3px" }} />
+                </div>
+                <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: "6px" }}>
+                  {totalWords.toLocaleString()} chapter words + ~10 prelim pgs
+                </div>
+              </div>
+
               <div className="glass-card" style={{ padding: "20px" }}>
                 <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total Words Written</span>
                 <div style={{ fontSize: "1.8rem", fontWeight: "800", color: "#ffffff", marginTop: "4px" }}>
                   {totalWords.toLocaleString()} <span style={{ fontSize: "0.9rem", color: "var(--violet-400)" }}>words</span>
                 </div>
                 <div style={{ fontSize: "0.78rem", color: "var(--emerald-400)", marginTop: "4px" }}>
-                  Counted across your saved chapters
+                  Counted across all project chapters
                 </div>
               </div>
 
@@ -1475,7 +1503,7 @@ export default function Home() {
                   {overallProgress}%
                 </div>
                 <div style={{ fontSize: "0.78rem", color: "var(--cyan-400)", marginTop: "4px" }}>
-                  {chaptersMeetingMinimum} of {Object.keys(project.chapters).length} chapters meet the 600-word minimum
+                  {chaptersMeetingMinimum} of {Object.keys(project.chapters).length} chapters meet academic minimum
                 </div>
               </div>
 
@@ -1485,7 +1513,7 @@ export default function Home() {
                   {project.supervisorNotes.filter((n) => !n.resolved).length} Pending
                 </div>
                 <div style={{ fontSize: "0.78rem", color: "var(--amber-400)", marginTop: "4px" }}>
-                  Supervisor: {project.supervisor}
+                  Supervisor: {project.supervisor || "Not set"}
                 </div>
               </div>
 
@@ -1552,15 +1580,15 @@ export default function Home() {
                             {ch.title}
                           </div>
                           <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                            {chapterWords.toLocaleString()} words • {meetsMinimum ? "minimum met" : "below 600-word minimum"}
+                            {chapterWords.toLocaleString()} words (~{Math.max(1, Math.round(chapterWords / 280))} pages) • {chapterWords >= 2000 ? "full chapter depth" : chapterWords >= 600 ? "drafted" : "needs drafting"}
                           </div>
                         </div>
 
                         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
                           <span
-                            className={`badge ${meetsMinimum ? "badge-emerald" : "badge-violet"}`}
+                            className={`badge ${chapterWords >= 2000 ? "badge-emerald" : chapterWords >= 600 ? "badge-violet" : "badge-amber"}`}
                           >
-                            {meetsMinimum ? "Ready for review" : "In progress"}
+                            {chapterWords >= 2000 ? `~${Math.round(chapterWords / 280)} pgs (Complete)` : chapterWords >= 600 ? `~${Math.round(chapterWords / 280)} pgs (Draft)` : "In progress"}
                           </span>
                           <button className="btn btn-ghost btn-sm" style={{ padding: "4px 8px" }}>
                             Edit →
@@ -1713,14 +1741,22 @@ export default function Home() {
                     </div>
                     <span
                       style={{
-                        fontSize: "0.75rem",
+                        fontSize: "0.74rem",
                         padding: "2px 6px",
                         borderRadius: "4px",
                         background: "rgba(255, 255, 255, 0.08)",
                         color: "var(--text-secondary)"
                       }}
                     >
-                      {countChapterWords(`${ch?.title || ""}\n${ch?.content || ""}`) >= 600 ? "✓ 600+" : `${countChapterWords(`${ch?.title || ""}\n${ch?.content || ""}`)}/600`}
+                      {(() => {
+                        const chWords = countChapterWords(`${ch?.title || ""}\n${ch?.content || ""}`);
+                        const chPages = Math.max(1, Math.round(chWords / 280));
+                        return chWords >= 2000
+                          ? `✓ ~${chPages} pgs`
+                          : chWords > 0
+                          ? `~${chPages} pgs`
+                          : "Empty";
+                      })()}
                     </span>
                   </button>
                 );
@@ -1768,8 +1804,10 @@ export default function Home() {
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                  <strong>{wordCount.toLocaleString()}</strong> / 600 minimum • ~{readTime} min read
+                <span style={{ fontSize: "0.83rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span><strong>{wordCount.toLocaleString()}</strong> words (~{Math.max(1, Math.round(wordCount / 280))} pgs)</span>
+                  <span style={{ color: "var(--text-muted)" }}>•</span>
+                  <span style={{ color: "var(--violet-300)", fontWeight: "600" }}>Project: ~{estimatedTotalPages} / 70+ pgs</span>
                 </span>
                 <button className="btn btn-secondary btn-sm" onClick={handleExportWord}>
                   Export DOCX
@@ -1880,10 +1918,17 @@ export default function Home() {
                     onChange={handleEditorChange}
                     placeholder="Draft your chapter here. Use the Insert Table and Draw Diagram tools above to add academic visuals directly into your manuscript..."
                   />
-                  <div className={`word-count-status ${wordCount >= 600 ? "meets-minimum" : ""}`} aria-live="polite">
-                    {wordCount >= 600
-                      ? `✓ Minimum met (${wordCount.toLocaleString()} words, excluding the reference list)`
-                      : `${(600 - wordCount).toLocaleString()} more words needed to reach the 600-word minimum`}
+                  <div className={`word-count-status ${wordCount >= 2000 ? "meets-minimum" : ""}`} aria-live="polite" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>
+                      {wordCount >= 2000
+                        ? `🎉 Full Chapter Depth (${wordCount.toLocaleString()} words, ~${Math.round(wordCount / 280)} pages)`
+                        : wordCount >= 600
+                        ? `✓ Chapter Drafted (${wordCount.toLocaleString()} words, ~${Math.round(wordCount / 280)} pgs). Use "Expand & Deepen" to reach full 2,500+ words.`
+                        : `${wordCount.toLocaleString()} words (~${Math.max(1, Math.round(wordCount / 280))} pages) • Aim for 2,500–4,000 words per chapter.`}
+                    </span>
+                    <span style={{ fontSize: "0.8rem", color: "var(--violet-300)", fontWeight: "600" }}>
+                      Manuscript: ~{estimatedTotalPages} / 70+ pgs target
+                    </span>
                   </div>
                 </>
               ) : (
@@ -1951,31 +1996,62 @@ export default function Home() {
           <aside className="workspace-ai-panel">
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                <span style={{ fontSize: "1.1rem" }}>🤖</span>
+                <span style={{ fontSize: "1.1rem" }}>🏛️</span>
                 <h3 style={{ fontSize: "1rem", fontWeight: "700", color: "#ffffff" }}>
-                  AI Academic Copilot
+                  Full-Blown Chapter Author
                 </h3>
               </div>
-              <p style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                Draft chapters from your project documents, then review and refine the work.
+              <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: "1.4" }}>
+                Authors complete, publication-grade academic chapters (2,500–4,000+ words). Fully written without outlines or placeholders to reach the 70+ page dissertation target.
               </p>
+
+              <div style={{ padding: "10px 12px", background: "rgba(139, 92, 246, 0.12)", border: "1px solid rgba(139, 92, 246, 0.25)", borderRadius: "8px", marginTop: "10px", marginBottom: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.78rem" }}>
+                  <span style={{ fontWeight: "700", color: "var(--violet-200)" }}>🎯 70+ Page Goal</span>
+                  <span style={{ color: estimatedTotalPages >= 70 ? "var(--emerald-400)" : "var(--violet-300)", fontWeight: "700" }}>
+                    ~{estimatedTotalPages} / 70+ pgs ({pageProgressPercent}%)
+                  </span>
+                </div>
+                <div style={{ width: "100%", height: "4px", background: "rgba(255, 255, 255, 0.1)", borderRadius: "2px", marginTop: "6px", overflow: "hidden" }}>
+                  <div style={{ width: `${pageProgressPercent}%`, height: "100%", background: "linear-gradient(90deg, var(--violet-500), var(--emerald-400))", borderRadius: "2px" }} />
+                </div>
+              </div>
             </div>
 
             {/* Tool Action Buttons */}
             <div className="ai-tool-grid">
-              <button className="ai-tool-button ai-generate-button" onClick={() => runAiAssist("generate")} disabled={isAiLoading}>
-                <span>✍️</span> {isAiLoading ? "Writing chapter..." : `Write Chapter ${currentChapter} (600+ words)`}
+              <button
+                className="ai-tool-button ai-generate-button"
+                onClick={() => runAiAssist("generate")}
+                disabled={isAiLoading}
+                style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)", padding: "12px", fontSize: "0.92rem", fontWeight: "700" }}
+              >
+                <span>✍️</span> {isAiLoading ? "Writing full chapter..." : `Write Full Chapter ${currentChapter} (2,500–4,000+ words)`}
               </button>
+
+              <button
+                className="ai-tool-button"
+                onClick={() => runAiAssist("expand")}
+                disabled={isAiLoading || !editorText.trim()}
+                style={{ border: "1px solid rgba(16, 185, 129, 0.4)", background: "rgba(16, 185, 129, 0.12)", color: "#ffffff", fontWeight: "600" }}
+              >
+                <span>🚀</span> Expand & Deepen Chapter (Add Pages & Depth)
+              </button>
+
               <textarea
                 className="refinement-input"
-                rows="3"
+                rows="2"
                 value={refinementRequest}
                 onChange={(e) => setRefinementRequest(e.target.value)}
-                placeholder="How should the AI revise this draft? e.g. clarify the research gap"
-                aria-label="Chapter refinement instructions"
+                placeholder="Optional instructions: e.g. deepen theoretical framework, add empirical data table..."
+                aria-label="Chapter custom instructions"
               />
-              <button className="ai-tool-button" onClick={() => runAiAssist("refine")} disabled={isAiLoading || !editorText.trim()}>
-                <span>🔁</span> Refine Current Draft
+              <button
+                className="ai-tool-button"
+                onClick={() => runAiAssist("refine")}
+                disabled={isAiLoading || !editorText.trim() || !refinementRequest.trim()}
+              >
+                <span>✨</span> Apply Custom Instructions
               </button>
             </div>
 
@@ -2001,7 +2077,7 @@ export default function Home() {
                     : "Paste your real outputs: design decisions, system description, argument, or review conclusions."
                 }
               />
-              <p className="visual-plan-note">The writer will not invent results. Anything missing here is marked for you to supply.</p>
+              <p className="visual-plan-note">The author writes full academic analysis, research data tables, and methodology grounded in your project materials.</p>
               <button className="btn btn-secondary btn-sm" onClick={buildOutlineFromGuideline} disabled={isOutlineLoading || !projectContext}>
                 {isOutlineLoading ? "Reading guideline..." : "Build outline from guideline"}
               </button>
