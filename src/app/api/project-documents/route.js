@@ -8,8 +8,8 @@ PDFParse.setWorker(
 );
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_GUIDELINE_CHARS = 18000;
-const MAX_SOURCE_CHARS = 42000;
+const MAX_GUIDELINE_CHARS = 60000;
+const MAX_SOURCE_CHARS = 300000;
 
 async function extractText(file) {
   if (!file || file.size === 0) throw new Error("One of the selected documents is empty.");
@@ -79,7 +79,7 @@ export async function POST(request) {
 
     if (guideline.length > MAX_GUIDELINE_CHARS || sourceCharacters > MAX_SOURCE_CHARS) {
       return Response.json(
-        { error: "The extracted documents are too long. Shorten the guideline to 18,000 characters and project sources to 42,000 characters combined." },
+        { error: "The extracted documents are too long. Shorten the guideline to 60,000 characters and project sources to 300,000 characters combined." },
         { status: 413 }
       );
     }

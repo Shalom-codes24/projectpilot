@@ -28,6 +28,7 @@ const EMPTY_PROJECT = {
 };
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState("landing"); // 'landing' | 'dashboard' | 'studio'
   const [project, setProject] = useState(EMPTY_PROJECT);
   const [currentChapter, setCurrentChapter] = useState(1);
@@ -69,6 +70,7 @@ export default function Home() {
 
   // Load from localStorage on mount
   useEffect(() => {
+    setMounted(true);
     try {
       const saved = localStorage.getItem("projectpilot_project");
       if (saved) {
@@ -479,6 +481,18 @@ export default function Home() {
   };
 
   // Create Project Flow
+  const handleSourceFilesChange = (event) => {
+    const selectedFiles = Array.from(event.target.files || []);
+    if (selectedFiles.length > 3) {
+      event.target.value = "";
+      setSourceFiles([]);
+      setFormError("Choose no more than 3 project-related documents. Your department guideline is separate.");
+      return;
+    }
+    setFormError("");
+    setSourceFiles(selectedFiles);
+  };
+
   const handleCreateProject = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -521,18 +535,6 @@ export default function Home() {
         chapters: buildChapters(newStructure)
       };
 
-      const handleSourceFilesChange = (event) => {
-        const selectedFiles = Array.from(event.target.files || []);
-        if (selectedFiles.length > 3) {
-          event.target.value = "";
-          setSourceFiles([]);
-          setFormError("Choose no more than 3 project-related documents. Your department guideline is separate.");
-          return;
-        }
-        setFormError("");
-        setSourceFiles(selectedFiles);
-      };
-
       try {
         localStorage.setItem("projectpilot_project", JSON.stringify(newPrj));
       } catch {
@@ -553,8 +555,12 @@ export default function Home() {
     }
   };
 
+  if (!mounted) {
+    return null;
+  }
+
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div suppressHydrationWarning style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* ========================================================
           NAVIGATION BAR
          ======================================================== */}

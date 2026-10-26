@@ -3,7 +3,7 @@ import { GEMINI_TEXT_MODEL, getGeminiClient } from "../../../lib/gemini";
 
 export async function POST(request) {
   const requestBytes = Number(request.headers.get("content-length"));
-  if (Number.isFinite(requestBytes) && requestBytes > 200 * 1024) {
+  if (Number.isFinite(requestBytes) && requestBytes > 1.5 * 1024 * 1024) {
     return Response.json({ error: "The chapter request exceeds the 200 KB limit." }, { status: 413 });
   }
 
@@ -35,7 +35,7 @@ export async function POST(request) {
       return Response.json({ error: "Project guideline, source documents, and chapter details are required." }, { status: 400 });
     }
     const sourceCharacters = sources.reduce((sum, source) => sum + source.content.length, 0);
-    if (guideline.length > 18000 || sourceCharacters > 42000 || (draft?.length || 0) > 50000 || (typeof findings === "string" ? findings.length : 0) > 30000) {
+    if (guideline.length > 60000 || sourceCharacters > 300000 || (draft?.length || 0) > 50000 || (typeof findings === "string" ? findings.length : 0) > 30000) {
       return Response.json({ error: "The provided project context is too long. Reduce the uploaded material or draft and try again." }, { status: 413 });
     }
 

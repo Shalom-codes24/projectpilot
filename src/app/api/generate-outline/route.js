@@ -11,8 +11,8 @@ export async function POST(request) {
     if (consent !== true) {
       return Response.json({ error: "Confirm that you want the guideline sent to Gemini." }, { status: 400 });
     }
-    if (typeof guideline !== "string" || !guideline.trim() || guideline.length > 18000) {
-      return Response.json({ error: "A guideline of up to 18,000 characters is required." }, { status: 400 });
+    if (typeof guideline !== "string" || !guideline.trim() ||     guideline.length > 60000) {
+          return Response.json({ error: "A guideline of up to 60,000 characters is required." }, { status: 400 });
     }
 
     const interaction = await gemini.interactions.create({
