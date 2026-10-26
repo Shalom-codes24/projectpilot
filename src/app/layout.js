@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "ProjectPilot — AI-Powered Final-Year Project Writing Platform",
-  description: "Create source-grounded final-year project chapter drafts from your department guideline and project documents, with a 500-word minimum and reviewed project visuals.",
+  description: "Create source-grounded final-year project chapter drafts from your department guideline and project documents, with a 600-word minimum and reviewed project visuals.",
   keywords: [
     "final year project",
     "academic research writing",

@@ -165,7 +165,7 @@ export default function Home() {
 
   // Overall project completion %
   const chaptersMeetingMinimum = Object.values(project.chapters).filter(
-    (chapter) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) >= 500
+    (chapter) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) >= 600
   ).length;
   const overallProgress = Math.round(
     (chaptersMeetingMinimum / Object.keys(project.chapters).length) * 100
@@ -222,8 +222,8 @@ export default function Home() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Chapter generation failed.");
       const generatedWordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${result.content}`);
-      if (generatedWordCount < 500) {
-        throw new Error(`The generated draft contains ${generatedWordCount} words; at least 500 are required. Please try again.`);
+      if (generatedWordCount < 600) {
+        throw new Error(`The generated draft contains ${generatedWordCount} words; at least 600 are required. Please try again.`);
       }
       setEditorText(result.content);
       setVisualPlan(result.visuals || []);
@@ -423,13 +423,13 @@ export default function Home() {
       return false;
     }
     const chaptersBelowMinimum = Object.entries(project.chapters)
-      .filter(([, chapter]) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) < 500)
+      .filter(([, chapter]) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) < 600)
       .map(([number]) => Number(number));
     if (chaptersBelowMinimum.length > 0) {
       setCurrentChapter(chaptersBelowMinimum[0]);
       setActiveView("studio");
       setAiFeedback(
-        `Complete every chapter to at least 500 words before export. Chapters below the minimum: ${chaptersBelowMinimum.join(", ")}.`
+        `Complete every chapter to at least 600 words before export. Chapters below the minimum: ${chaptersBelowMinimum.join(", ")}.`
       );
       return false;
     }
@@ -1140,7 +1140,7 @@ export default function Home() {
                   {overallProgress}%
                 </div>
                 <div style={{ fontSize: "0.78rem", color: "var(--cyan-400)", marginTop: "4px" }}>
-                  {chaptersMeetingMinimum} of {Object.keys(project.chapters).length} chapters meet the 500-word minimum
+                  {chaptersMeetingMinimum} of {Object.keys(project.chapters).length} chapters meet the 600-word minimum
                 </div>
               </div>
 
@@ -1202,7 +1202,7 @@ export default function Home() {
                   {Object.keys(project.chapters).map((num) => {
                     const ch = project.chapters[num];
                     const chapterWords = countChapterWords(`${ch.title || ""}\n${ch.content || ""}`);
-                    const meetsMinimum = chapterWords >= 500;
+                    const meetsMinimum = chapterWords >= 600;
                     return (
                       <div
                         key={num}
@@ -1217,7 +1217,7 @@ export default function Home() {
                             {ch.title}
                           </div>
                           <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                            {chapterWords.toLocaleString()} words • {meetsMinimum ? "minimum met" : "below 500-word minimum"}
+                            {chapterWords.toLocaleString()} words • {meetsMinimum ? "minimum met" : "below 600-word minimum"}
                           </div>
                         </div>
 
@@ -1385,7 +1385,7 @@ export default function Home() {
                         color: "var(--text-secondary)"
                       }}
                     >
-                      {countChapterWords(`${ch?.title || ""}\n${ch?.content || ""}`) >= 500 ? "✓ 500+" : `${countChapterWords(`${ch?.title || ""}\n${ch?.content || ""}`)}/500`}
+                      {countChapterWords(`${ch?.title || ""}\n${ch?.content || ""}`) >= 600 ? "✓ 600+" : `${countChapterWords(`${ch?.title || ""}\n${ch?.content || ""}`)}/600`}
                     </span>
                   </button>
                 );
@@ -1434,7 +1434,7 @@ export default function Home() {
 
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                  <strong>{wordCount.toLocaleString()}</strong> / 500 minimum • ~{readTime} min read
+                  <strong>{wordCount.toLocaleString()}</strong> / 600 minimum • ~{readTime} min read
                 </span>
                 <button className="btn btn-secondary btn-sm" onClick={handleExportWord}>
                   Export DOCX
@@ -1481,10 +1481,10 @@ export default function Home() {
                 onChange={handleEditorChange}
                 placeholder="Generate a chapter from your uploaded project documents, then review and refine the draft here..."
               />
-              <div className={`word-count-status ${wordCount >= 500 ? "meets-minimum" : ""}`} aria-live="polite">
-                {wordCount >= 500
+              <div className={`word-count-status ${wordCount >= 600 ? "meets-minimum" : ""}`} aria-live="polite">
+                {wordCount >= 600
                   ? `✓ Minimum met (${wordCount.toLocaleString()} words, excluding the reference list)`
-                  : `${(500 - wordCount).toLocaleString()} more words needed to reach the 500-word minimum`}
+                  : `${(600 - wordCount).toLocaleString()} more words needed to reach the 600-word minimum`}
               </div>
             </div>
           </section>
@@ -1506,7 +1506,7 @@ export default function Home() {
             {/* Tool Action Buttons */}
             <div className="ai-tool-grid">
               <button className="ai-tool-button ai-generate-button" onClick={() => runAiAssist("generate")} disabled={isAiLoading}>
-                <span>✍️</span> {isAiLoading ? "Writing chapter..." : `Write Chapter ${currentChapter} (500+ words)`}
+                <span>✍️</span> {isAiLoading ? "Writing chapter..." : `Write Chapter ${currentChapter} (600+ words)`}
               </button>
               <textarea
                 className="refinement-input"
@@ -1636,7 +1636,7 @@ export default function Home() {
               {isAiLoading ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--violet-300)", fontSize: "0.88rem" }}>
                   <span className="pulse-dot"></span>
-                  <span>Writing chapter and checking the 500-word minimum...</span>
+                  <span>Writing chapter and checking the 600-word minimum...</span>
                 </div>
               ) : aiFeedback ? (
                 <div style={{ fontSize: "0.85rem", color: "#e2e8f0", lineHeight: "1.6", whiteSpace: "pre-line" }}>
