@@ -16,31 +16,70 @@ export function isHeadingLine(line) {
 }
 
 export function parseBlocks(content = "") {
-  return content
-    .replace(/\r\n/g, "\n")
-    .split(/\n{2,}/)
-    .flatMap((block) => {
-      const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
-      const blocks = [];
-      let paragraph = [];
-      const flush = () => {
-        if (paragraph.length) blocks.push({ type: "paragraph", text: paragraph.join(" ") });
-        paragraph = [];
-      };
-      for (const line of lines) {
-        if (isHeadingLine(line)) {
-          flush();
-          blocks.push({ type: "heading", text: toTitleCase(line) });
-        } else if (/^(?:\d+[.)]|[-•*])\s+/.test(line)) {
-          flush();
-          blocks.push({ type: "list", text: line });
-        } else {
-          paragraph.push(line);
-        }
+  const normalized = content.replace(/\r\n/g, "\n");
+  const rawBlocks = normalized.split(/\n{2,}/);
+  const blocks = [];
+
+  for (const block of rawBlocks) {
+    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 0) continue;
+
+    const blockText = lines.join("\n");
+
+    // 1. Mermaid diagram block
+    const mermaidMatch = blockText.match(/(?:(?:figure\s+\d+[^\n]*\n)?)```(?:mermaid)?\s*([\s\S]*?)```/i);
+    if (mermaidMatch) {
+      const captionLine = lines.find((l) => /^figure\s+\d+/i.test(l));
+      blocks.push({
+        type: "diagram",
+        caption: captionLine || "Figure Diagram",
+        code: mermaidMatch[1].trim()
+      });
+      continue;
+    }
+
+    // 2. Markdown Table block
+    const tablePipeLines = lines.filter((l) => l.startsWith("|") && l.endsWith("|"));
+    if (tablePipeLines.length >= 2) {
+      const sepIndex = tablePipeLines.findIndex((l) => /^\|(?:\s*:?-+:?\s*\|)+$/.test(l));
+      if (sepIndex >= 1) {
+        const captionLine = lines.find((l) => /^table\s+\d+/i.test(l));
+        const parseRow = (row) => row.split("|").slice(1, -1).map((c) => c.trim());
+        const headers = parseRow(tablePipeLines[0]);
+        const rows = tablePipeLines.slice(sepIndex + 1).map(parseRow);
+
+        blocks.push({
+          type: "table",
+          caption: captionLine || "",
+          headers,
+          rows
+        });
+        continue;
       }
-      flush();
-      return blocks;
-    });
+    }
+
+    // 3. Fallback: Headings, lists, and prose paragraphs
+    let paragraph = [];
+    const flush = () => {
+      if (paragraph.length) blocks.push({ type: "paragraph", text: paragraph.join(" ") });
+      paragraph = [];
+    };
+
+    for (const line of lines) {
+      if (isHeadingLine(line)) {
+        flush();
+        blocks.push({ type: "heading", text: toTitleCase(line) });
+      } else if (/^(?:\d+[.)]|[-•*])\s+/.test(line)) {
+        flush();
+        blocks.push({ type: "list", text: line });
+      } else {
+        paragraph.push(line);
+      }
+    }
+    flush();
+  }
+
+  return blocks;
 }
 
 export function getFormatting(project) {
@@ -121,7 +160,24 @@ export function manuscriptFileName(project) {
 
 export async function buildDocxBlob(project) {
   const docx = await import("docx");
-  const { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, Footer, PageNumber, TableOfContents, NumberFormat } = docx;
+  const {
+    Document,
+    Packer,
+    Paragraph,
+    TextRun,
+    AlignmentType,
+    HeadingLevel,
+    Footer,
+    PageNumber,
+    TableOfContents,
+    NumberFormat,
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+    BorderStyle
+  } = docx;
+
   const { font, sizePt, spacing } = getFormatting(project);
   const halfPoints = Math.round(sizePt * 2);
   const line = Math.round(spacing * 240);
@@ -133,6 +189,7 @@ export async function buildDocxBlob(project) {
       spacing: { after: 240, line },
       children: [run(text, { bold: options.bold, size: Math.round(halfPoints * (options.size || 1)) })]
     });
+
   const pageTitle = (text, first, heading) =>
     new Paragraph({
       heading,
@@ -141,6 +198,7 @@ export async function buildDocxBlob(project) {
       spacing: { after: 240, line },
       children: [run(text.toUpperCase(), { bold: true, size: Math.round(halfPoints * 1.2) })]
     });
+
   const body = (text) =>
     new Paragraph({ alignment: AlignmentType.JUSTIFIED, indent: { firstLine: 720 }, spacing: { after: 160, line }, children: [run(text)] });
   const plain = (text) => new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 160, line }, children: [run(text)] });
@@ -149,6 +207,7 @@ export async function buildDocxBlob(project) {
     new Footer({
       children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], font, size: halfPoints })] })]
     });
+
   const pageSetup = (numbers) => ({
     page: {
       size: { width: 11906, height: 16838 },
@@ -176,9 +235,84 @@ export async function buildDocxBlob(project) {
   const main = [];
   orderedChapters(project).forEach((chapter, index) => {
     main.push(pageTitle(chapter.title || `Chapter ${index + 1}`, index === 0, HeadingLevel.HEADING_1));
+
     for (const block of parseBlocks(chapter.content)) {
       if (block.type === "heading") {
         main.push(new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 120, line }, children: [run(block.text, { bold: true })] }));
+      } else if (block.type === "table") {
+        if (block.caption) {
+          main.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { before: 240, after: 100, line },
+              children: [run(block.caption, { bold: true })]
+            })
+          );
+        }
+        main.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 8, color: "000000" },
+              bottom: { style: BorderStyle.SINGLE, size: 8, color: "000000" },
+              left: { style: BorderStyle.NONE },
+              right: { style: BorderStyle.NONE },
+              insideHorizontal: { style: BorderStyle.NONE },
+              insideVertical: { style: BorderStyle.NONE }
+            },
+            rows: [
+              new TableRow({
+                tableHeader: true,
+                children: block.headers.map((h) =>
+                  new TableCell({
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 8, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 6, color: "000000" },
+                      left: { style: BorderStyle.NONE },
+                      right: { style: BorderStyle.NONE }
+                    },
+                    margins: { top: 120, bottom: 120, left: 160, right: 160 },
+                    children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [run(h, { bold: true })] })]
+                  })
+                )
+              }),
+              ...block.rows.map((row) =>
+                new TableRow({
+                  children: row.map((cell) =>
+                    new TableCell({
+                      borders: {
+                        top: { style: BorderStyle.NONE },
+                        bottom: { style: BorderStyle.NONE },
+                        left: { style: BorderStyle.NONE },
+                        right: { style: BorderStyle.NONE }
+                      },
+                      margins: { top: 100, bottom: 100, left: 160, right: 160 },
+                      children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [run(cell)] })]
+                    })
+                  )
+                })
+              )
+            ]
+          })
+        );
+        main.push(new Paragraph({ spacing: { after: 180, line }, children: [] }));
+      } else if (block.type === "diagram") {
+        main.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 240, after: 80, line },
+            children: [run(`[FIGURE: ${block.caption || "Project Diagram"}]`, { bold: true })]
+          })
+        );
+        if (block.caption) {
+          main.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200, line },
+              children: [run(block.caption, { italics: true })]
+            })
+          );
+        }
       } else {
         main.push(
           new Paragraph({
@@ -232,7 +366,6 @@ export async function buildDocxBlob(project) {
 const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
-// The browser print dialog cannot set roman/arabic page numbering; use the DOCX export for numbered pages.
 export function buildPrintableHtml(project) {
   const { font, sizePt, spacing } = getFormatting(project);
   const captions = collectCaptions(project.chapters);
@@ -261,7 +394,27 @@ export function buildPrintableHtml(project) {
   const main = chapters
     .map((chapter) => {
       const content = parseBlocks(chapter.content)
-        .map((block) => (block.type === "heading" ? `<h2>${escapeHtml(block.text)}</h2>` : `<p class="${block.type}">${escapeHtml(block.text)}</p>`))
+        .map((block) => {
+          if (block.type === "heading") {
+            return `<h2>${escapeHtml(block.text)}</h2>`;
+          }
+          if (block.type === "table") {
+            return `<div class="table-container">
+              ${block.caption ? `<p class="table-caption"><strong>${escapeHtml(block.caption)}</strong></p>` : ""}
+              <table class="apa-table">
+                <thead><tr>${block.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
+                <tbody>${block.rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}</tbody>
+              </table>
+            </div>`;
+          }
+          if (block.type === "diagram") {
+            return `<div class="figure-container">
+              <div class="figure-box">[Diagram: ${escapeHtml(block.caption || "Project Visual")}]</div>
+              ${block.caption ? `<p class="figure-caption"><em>${escapeHtml(block.caption)}</em></p>` : ""}
+            </div>`;
+          }
+          return `<p class="${block.type}">${escapeHtml(block.text)}</p>`;
+        })
         .join("");
       return section(chapter.title, content);
     })
@@ -285,5 +438,13 @@ h1 { text-align: center; text-transform: uppercase; font-size: ${sizePt * 1.2}pt
 h2 { font-size: ${sizePt}pt; margin: 18pt 0 6pt; }
 p { margin: 0 0 8pt; } p.paragraph { text-align: justify; text-indent: 0.5in; } p.list, p.plain { margin-left: 0.25in; }
 p.reference { margin-left: 0.5in; text-indent: -0.5in; }
+.table-container { margin: 18pt 0; page-break-inside: avoid; }
+.table-caption { font-weight: bold; margin-bottom: 6pt; font-size: ${sizePt * 0.95}pt; }
+table.apa-table { width: 100%; border-collapse: collapse; border-top: 1.5pt solid #000; border-bottom: 1.5pt solid #000; margin-bottom: 12pt; }
+table.apa-table th { border-bottom: 1pt solid #000; padding: 6pt 8pt; text-align: left; font-weight: bold; font-size: ${sizePt * 0.95}pt; }
+table.apa-table td { padding: 5pt 8pt; text-align: left; font-size: ${sizePt * 0.95}pt; }
+.figure-container { margin: 18pt 0; text-align: center; page-break-inside: avoid; }
+.figure-box { border: 1pt dashed #666; padding: 24pt; background: #f8f8f8; font-family: sans-serif; font-size: 10pt; color: #444; border-radius: 4pt; }
+.figure-caption { font-weight: bold; margin-top: 6pt; font-size: ${sizePt * 0.95}pt; }
 </style></head><body><div class="title-page">${title}</div>${preliminary}${main}${referenceSection}${appendixSection}</body></html>`;
 }

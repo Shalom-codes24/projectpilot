@@ -1,13 +1,7 @@
-import { GEMINI_IMAGE_MODEL, getGeminiClient } from "../../../lib/gemini";
+import { GEMINI_IMAGE_MODEL, executeWithKeyRotation } from "../../../lib/gemini";
 
 export async function POST(request) {
-  const gemini = getGeminiClient();
-  if (!gemini) {
-    return Response.json(
-      { error: "Image generation is not configured yet. Add GEMINI_API_KEY to .env.local and restart the app." },
-      { status: 503 }
-    );
-  }
+  const clientKey = request.headers.get("x-gemini-api-key");
 
   try {
     const { prompt, consent } = await request.json();
@@ -18,11 +12,16 @@ export async function POST(request) {
       return Response.json({ error: "A valid visual prompt of up to 4,000 characters is required." }, { status: 400 });
     }
 
-    const interaction = await gemini.interactions.create({
-      model: GEMINI_IMAGE_MODEL,
-      store: false,
-      input: `Create a clear, academically appropriate project illustration. Do not include invented statistics, labels, or citations. ${prompt}`
-    });
+    const interaction = await executeWithKeyRotation(
+      (gemini) =>
+        gemini.interactions.create({
+          model: GEMINI_IMAGE_MODEL,
+          store: false,
+          input: `Create a clear, academically appropriate project illustration. Do not include invented statistics, labels, or citations. ${prompt}`
+        }),
+      clientKey
+    );
+
     const image = interaction.output_image?.data;
     const mimeType = interaction.output_image?.mime_type || "image/png";
     if (!image || image.length > 20 * 1024 * 1024) {

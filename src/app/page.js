@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { countChapterWords } from "../lib/word-count";
-import { buildDocxBlob, buildPrintableHtml, manuscriptFileName } from "../lib/export-manuscript";
+import { buildDocxBlob, buildPrintableHtml, manuscriptFileName, parseBlocks } from "../lib/export-manuscript";
 import { formatReference } from "../lib/references";
 import { CHAPTER_STRUCTURES, buildChapters, exportWarnings } from "../lib/nigerian-format";
 
@@ -26,6 +26,46 @@ const EMPTY_PROJECT = {
   references: [],
   supervisorNotes: []
 };
+
+function MermaidDiagram({ code, id }) {
+  const containerRef = useRef(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!code || !containerRef.current) return;
+
+    import("mermaid")
+      .then(({ default: mermaid }) => {
+        mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "neutral" });
+        const uniqueId = `mermaid-fig-${id || Math.random().toString(36).substring(7)}`;
+        return mermaid.render(uniqueId, code);
+      })
+      .then((res) => {
+        if (isMounted && containerRef.current) {
+          containerRef.current.innerHTML = res.svg;
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) setError(err.message);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [code, id]);
+
+  if (error) {
+    return (
+      <div style={{ color: "#ef4444", fontSize: "0.85rem", padding: "10px", background: "#fef2f2", borderRadius: "6px" }}>
+        Diagram rendering issue: {error}
+      </div>
+    );
+  }
+
+  return <div ref={containerRef} className="mermaid-render-target" />;
+}
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -56,6 +96,35 @@ export default function Home() {
   const [sourceSearchError, setSourceSearchError] = useState("");
   const diagramPreviewRef = useRef(null);
 
+  // Word-friendly Editor & Preview State
+  const [editorViewMode, setEditorViewMode] = useState("editor"); // 'editor' | 'preview'
+  const editorTextareaRef = useRef(null);
+
+  // API Key Pool Management State
+  const [keysStatus, setKeysStatus] = useState({ totalKeys: 3, activeKeyIndex: 0, keys: [] });
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [customKeyError, setCustomKeyError] = useState("");
+
+  // Table Builder State
+  const [isTableModalOpen, setIsTableModalOpen] = useState(false);
+  const [tableCaption, setTableCaption] = useState("Table 4.1: Demographic Characteristics of Respondents");
+  const [tableHeaders, setTableHeaders] = useState(["Variable", "Category", "Frequency (N=150)", "Percentage (%)"]);
+  const [tableRowsData, setTableRowsData] = useState([
+    ["Gender", "Male", "85", "56.7%"],
+    ["Gender", "Female", "65", "43.3%"],
+    ["Academic Level", "400 Level", "110", "73.3%"],
+    ["Academic Level", "500 Level", "40", "26.7%"]
+  ]);
+
+  // Diagram Studio State
+  const [isDiagramModalOpen, setIsDiagramModalOpen] = useState(false);
+  const [diagramModalCaption, setDiagramModalCaption] = useState("Figure 4.1: Research Process Flowchart");
+  const [diagramModalCode, setDiagramModalCode] = useState(
+    `graph TD\n  Start([Research Problem]) --> Review[Literature Review]\n  Review --> Method[Methodology & Data Collection]\n  Method --> Analysis[Empirical Data Analysis]\n  Analysis --> Results[Results & Discussion]\n  Results --> End([Conclusion & Recommendations])`
+  );
+  const diagramModalPreviewRef = useRef(null);
+
   // New Project Form State
   const [newTitle, setNewTitle] = useState("");
   const [newDept, setNewDept] = useState("Computer Science");
@@ -71,6 +140,19 @@ export default function Home() {
   // Load from localStorage on mount
   useEffect(() => {
     setMounted(true);
+    // Query API key pool status
+    fetch("/api/api-status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.totalKeys) setKeysStatus(data);
+      })
+      .catch(() => {});
+
+    try {
+      const storedKey = localStorage.getItem("projectpilot_custom_api_key");
+      if (storedKey) setCustomApiKey(storedKey);
+    } catch {}
+
     try {
       const saved = localStorage.getItem("projectpilot_project");
       if (saved) {
@@ -85,6 +167,195 @@ export default function Home() {
       setEditorText("");
     }
   }, []);
+
+  // Live Diagram Studio preview effect
+  useEffect(() => {
+    if (!isDiagramModalOpen || !diagramModalPreviewRef.current || !diagramModalCode) return;
+    let isMounted = true;
+    import("mermaid")
+      .then(({ default: mermaid }) => {
+        mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "dark" });
+        return mermaid.render(`studio-diagram-${Date.now()}`, diagramModalCode);
+      })
+      .then((res) => {
+        if (isMounted && diagramModalPreviewRef.current) {
+          diagramModalPreviewRef.current.innerHTML = res.svg;
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [diagramModalCode, isDiagramModalOpen]);
+
+  // Insert text at cursor in editorText
+  const insertTextAtCursor = (before, after = "") => {
+    const textarea = editorTextareaRef.current;
+    if (!textarea) {
+      const updated = editorText + "\n\n" + before + after;
+      setEditorText(updated);
+      handleEditorChange({ target: { value: updated } });
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = editorText.substring(start, end);
+    const replacement = before + (selected || "") + after;
+    const newText = editorText.substring(0, start) + replacement + editorText.substring(end);
+    setEditorText(newText);
+    handleEditorChange({ target: { value: newText } });
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + before.length, start + replacement.length - after.length);
+    }, 50);
+  };
+
+  const insertFormatting = (type) => {
+    if (type === "bold") insertTextAtCursor("**", "**");
+    else if (type === "italic") insertTextAtCursor("*", "*");
+    else if (type === "h2") insertTextAtCursor(`\n\n${currentChapter}.1 `, "\n");
+    else if (type === "h3") insertTextAtCursor(`\n\n${currentChapter}.1.1 `, "\n");
+    else if (type === "bullet") insertTextAtCursor("\n- ", "\n");
+    else if (type === "numbered") insertTextAtCursor("\n1. ", "\n");
+    else if (type === "quote") insertTextAtCursor("\n> ", "\n");
+  };
+
+  const openTableBuilderModal = () => {
+    setTableCaption(`Table ${currentChapter}.1: Demographic Characteristics of Respondents`);
+    setIsTableModalOpen(true);
+  };
+
+  const applyTablePreset = (presetName) => {
+    if (presetName === "demographic") {
+      setTableCaption(`Table ${currentChapter}.1: Demographic Distribution of Respondents`);
+      setTableHeaders(["Variable", "Category", "Frequency (N=150)", "Percentage (%)"]);
+      setTableRowsData([
+        ["Gender", "Male", "85", "56.7%"],
+        ["Gender", "Female", "65", "43.3%"],
+        ["Academic Level", "400 Level", "110", "73.3%"],
+        ["Academic Level", "500 Level", "40", "26.7%"]
+      ]);
+    } else if (presetName === "evaluation") {
+      setTableCaption(`Table ${currentChapter}.2: Comparative Model Performance Evaluation`);
+      setTableHeaders(["Model / Approach", "Accuracy (%)", "Precision", "Recall", "F1-Score"]);
+      setTableRowsData([
+        ["Proposed System", "96.4%", "0.95", "0.96", "0.95"],
+        ["Baseline Model A", "88.2%", "0.86", "0.87", "0.86"],
+        ["Traditional Approach", "79.5%", "0.78", "0.79", "0.78"]
+      ]);
+    } else if (presetName === "specs") {
+      setTableCaption(`Table ${currentChapter}.3: Hardware and Software System Specifications`);
+      setTableHeaders(["Component", "Specification", "Purpose", "Status"]);
+      setTableRowsData([
+        ["Operating System", "Windows 11 / Linux Ubuntu 22.04", "Host Environment", "Verified"],
+        ["Processor", "Intel Core i7 11th Gen @ 3.2GHz", "Model Execution", "Verified"],
+        ["Memory", "16 GB DDR4 RAM", "Data Preprocessing", "Required"],
+        ["Storage", "512 GB NVMe SSD", "Local Dataset Cache", "Required"]
+      ]);
+    } else {
+      setTableCaption(`Table ${currentChapter}.1: Custom Project Table`);
+      setTableHeaders(["Column 1", "Column 2", "Column 3"]);
+      setTableRowsData([
+        ["Item 1", "Data 1", "Notes 1"],
+        ["Item 2", "Data 2", "Notes 2"]
+      ]);
+    }
+  };
+
+  const handleInsertTableIntoEditor = () => {
+    const headerLine = `| ${tableHeaders.join(" | ")} |`;
+    const sepLine = `| ${tableHeaders.map(() => "---").join(" | ")} |`;
+    const rowsLines = tableRowsData.map((row) => `| ${row.join(" | ")} |`).join("\n");
+    const formattedTable = `\n\n${tableCaption.trim()}\n${headerLine}\n${sepLine}\n${rowsLines}\n\n`;
+
+    insertTextAtCursor(formattedTable);
+    setIsTableModalOpen(false);
+  };
+
+  const openDiagramStudioModal = () => {
+    setDiagramModalCaption(`Figure ${currentChapter}.1: System Architecture Diagram`);
+    setIsDiagramModalOpen(true);
+  };
+
+  const applyDiagramPreset = (presetName) => {
+    if (presetName === "flowchart") {
+      setDiagramModalCaption(`Figure ${currentChapter}.1: Research Methodology Flowchart`);
+      setDiagramModalCode(`graph TD
+  Start([Research Topic Selection]) --> Review[Literature & Theoretical Review]
+  Review --> Design[Methodological Framework]
+  Design --> Data[Empirical Data Collection]
+  Data --> Analysis[Statistical & Model Analysis]
+  Analysis --> Findings[Interpretation of Results]
+  Findings --> End([Conclusion & Recommendations])`);
+    } else if (presetName === "architecture") {
+      setDiagramModalCaption(`Figure ${currentChapter}.2: Proposed System Architecture`);
+      setDiagramModalCode(`graph TD
+  Client[Student Web Client] --> API[Next.js Application Gateway]
+  API --> Gemini[Google Gemini AI Engine]
+  API --> Engine[DOCX Formatting Engine]
+  API --> Store[(Manuscript Storage)]`);
+    } else if (presetName === "framework") {
+      setDiagramModalCaption(`Figure ${currentChapter}.1: Conceptual Framework`);
+      setDiagramModalCode(`graph LR
+  subgraph Independent_Variables[Independent Variables]
+    IV1[Technological Infrastructure]
+    IV2[User Training & Adoption]
+    IV3[Institutional Support]
+  end
+  subgraph Dependent_Variable[Dependent Variable]
+    DV[Project Research Quality]
+  end
+  Independent_Variables --> DV`);
+    } else if (presetName === "sequence") {
+      setDiagramModalCaption(`Figure ${currentChapter}.3: System Interaction Sequence`);
+      setDiagramModalCode(`sequenceDiagram
+  autonumber
+  Student->>System: Upload Guideline & Sources
+  System->>Gemini: Draft Structured Chapter Prose
+  Gemini-->>System: Grounded Chapter Content
+  System-->>Student: Reviewable Chapter Manuscript`);
+    }
+  };
+
+  const handleInsertDiagramIntoEditor = () => {
+    const formattedDiagram = `\n\n${diagramModalCaption.trim()}\n\`\`\`mermaid\n${diagramModalCode.trim()}\n\`\`\`\n\n`;
+    insertTextAtCursor(formattedDiagram);
+    setIsDiagramModalOpen(false);
+  };
+
+  const handleSaveCustomKey = () => {
+    const trimmed = customApiKey.trim();
+    if (!trimmed) {
+      setCustomKeyError("Please enter a valid API key.");
+      return;
+    }
+    try {
+      localStorage.setItem("projectpilot_custom_api_key", trimmed);
+      fetch("/api/api-status", { headers: { "x-gemini-api-key": trimmed } })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.totalKeys) setKeysStatus(data);
+        })
+        .catch(() => {});
+      setCustomKeyError("");
+      setIsKeyModalOpen(false);
+    } catch {
+      setCustomKeyError("Could not save to local storage.");
+    }
+  };
+
+  const handleClearCustomKey = () => {
+    setCustomApiKey("");
+    try {
+      localStorage.removeItem("projectpilot_custom_api_key");
+      fetch("/api/api-status")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.totalKeys) setKeysStatus(data);
+        })
+        .catch(() => {});
+    } catch {}
+  };
 
   // Update editor text when current chapter changes
   useEffect(() => {
@@ -191,7 +462,10 @@ export default function Home() {
     try {
       const response = await fetch("/api/generate-chapter", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(customApiKey ? { "x-gemini-api-key": customApiKey } : {})
+        },
         body: JSON.stringify({
           project: {
             title: project.title,
@@ -280,7 +554,10 @@ export default function Home() {
     try {
       const response = await fetch("/api/generate-outline", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(customApiKey ? { "x-gemini-api-key": customApiKey } : {})
+        },
         body: JSON.stringify({
           guideline: projectContext.guideline,
           project: { title: project.title, department: project.department, degree: project.degree },
@@ -365,7 +642,10 @@ export default function Home() {
     try {
       const response = await fetch("/api/generate-image", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(customApiKey ? { "x-gemini-api-key": customApiKey } : {})
+        },
         body: JSON.stringify({
           prompt: visual.imagePrompt,
           consent: allowAiProcessing
@@ -399,7 +679,10 @@ export default function Home() {
     try {
       const response = await fetch("/api/generate-abstract", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(customApiKey ? { "x-gemini-api-key": customApiKey } : {})
+        },
         body: JSON.stringify({
           project: { title: project.title, projectType: project.projectType },
           chapters: chapters.map((chapter) => ({ title: chapter.title, content: chapter.content })),
@@ -635,6 +918,27 @@ export default function Home() {
           </nav>
 
           <div className="nav-actions">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setIsKeyModalOpen(true)}
+              title="API Keys Pool & Auto-Failover"
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <span>🔑</span>
+              <span>{keysStatus.totalKeys || 3} Keys</span>
+              <span
+                style={{
+                  fontSize: "0.68rem",
+                  padding: "1px 6px",
+                  background: "rgba(52, 211, 153, 0.15)",
+                  color: "var(--emerald-400)",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(52, 211, 153, 0.3)"
+                }}
+              >
+                Auto-Failover
+              </span>
+            </button>
             <button className="btn btn-ghost btn-sm" onClick={() => setActiveView("dashboard")}>
               Sign In
             </button>
@@ -1454,38 +1758,161 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Editable Content Box */}
-            <div className="editor-content-box">
-              <input
-                className="editor-title-input"
-                value={project.chapters[currentChapter]?.title || ""}
-                onChange={(e) => {
-                  const updatedChapters = {
-                    ...project.chapters,
-                    [currentChapter]: {
-                      ...project.chapters[currentChapter],
-                      title: e.target.value
-                    }
-                  };
-                  const updatedProject = { ...project, chapters: updatedChapters };
-                  setProject(updatedProject);
-                  try {
-                    localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
-                  } catch {}
-                }}
-              />
-
-              <textarea
-                className="editor-textarea"
-                value={editorText}
-                onChange={handleEditorChange}
-                placeholder="Generate a chapter from your uploaded project documents, then review and refine the draft here..."
-              />
-              <div className={`word-count-status ${wordCount >= 600 ? "meets-minimum" : ""}`} aria-live="polite">
-                {wordCount >= 600
-                  ? `✓ Minimum met (${wordCount.toLocaleString()} words, excluding the reference list)`
-                  : `${(600 - wordCount).toLocaleString()} more words needed to reach the 600-word minimum`}
+            {/* WORD-FRIENDLY FORMATTING RIBBON */}
+            <div className="word-ribbon">
+              <div className="ribbon-group">
+                <button
+                  className={`ribbon-btn ${editorViewMode === "editor" ? "active" : ""}`}
+                  onClick={() => setEditorViewMode("editor")}
+                  title="Edit draft text"
+                >
+                  <span>📝</span> Draft Editor
+                </button>
+                <button
+                  className={`ribbon-btn ${editorViewMode === "preview" ? "active" : ""}`}
+                  onClick={() => setEditorViewMode("preview")}
+                  title="Live formatted Word-style manuscript preview"
+                >
+                  <span>👁️</span> Word Preview
+                </button>
               </div>
+
+              <div className="ribbon-group">
+                <button
+                  className="ribbon-btn ribbon-btn-primary"
+                  onClick={openTableBuilderModal}
+                  title="Insert an APA formatted table"
+                >
+                  <span>⊞</span> <strong>Insert Table</strong>
+                </button>
+                <button
+                  className="ribbon-btn ribbon-btn-primary"
+                  onClick={openDiagramStudioModal}
+                  title="Draw and insert an academic flowchart or diagram"
+                >
+                  <span>📊</span> <strong>Draw Diagram</strong>
+                </button>
+              </div>
+
+              <div className="ribbon-group">
+                <button className="ribbon-btn" onClick={() => insertFormatting("bold")} title="Bold (**text**)">
+                  <strong>B</strong>
+                </button>
+                <button className="ribbon-btn" onClick={() => insertFormatting("italic")} title="Italic (*text*)">
+                  <em>I</em>
+                </button>
+                <button className="ribbon-btn" onClick={() => insertFormatting("h2")} title="Insert Section Heading">
+                  H2
+                </button>
+                <button className="ribbon-btn" onClick={() => insertFormatting("h3")} title="Insert Subsection Heading">
+                  H3
+                </button>
+                <button className="ribbon-btn" onClick={() => insertFormatting("bullet")} title="Bullet List">
+                  • List
+                </button>
+                <button className="ribbon-btn" onClick={() => insertFormatting("numbered")} title="Numbered List">
+                  1. List
+                </button>
+                <button className="ribbon-btn" onClick={() => insertFormatting("quote")} title="Blockquote">
+                  ❝ Quote
+                </button>
+              </div>
+            </div>
+
+            {/* Content Area: Editor or Word Preview */}
+            <div className="editor-content-box">
+              {editorViewMode === "editor" ? (
+                <>
+                  <input
+                    className="editor-title-input"
+                    value={project.chapters[currentChapter]?.title || ""}
+                    onChange={(e) => {
+                      const updatedChapters = {
+                        ...project.chapters,
+                        [currentChapter]: {
+                          ...project.chapters[currentChapter],
+                          title: e.target.value
+                        }
+                      };
+                      const updatedProject = { ...project, chapters: updatedChapters };
+                      setProject(updatedProject);
+                      try {
+                        localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
+                      } catch {}
+                    }}
+                  />
+
+                  <textarea
+                    ref={editorTextareaRef}
+                    className="editor-textarea"
+                    value={editorText}
+                    onChange={handleEditorChange}
+                    placeholder="Draft your chapter here. Use the Insert Table and Draw Diagram tools above to add academic visuals directly into your manuscript..."
+                  />
+                  <div className={`word-count-status ${wordCount >= 600 ? "meets-minimum" : ""}`} aria-live="polite">
+                    {wordCount >= 600
+                      ? `✓ Minimum met (${wordCount.toLocaleString()} words, excluding the reference list)`
+                      : `${(600 - wordCount).toLocaleString()} more words needed to reach the 600-word minimum`}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                    <div style={{ fontSize: "0.85rem", color: "var(--violet-300)", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span>👁️</span> <strong>Word Manuscript Preview (APA 7th Format)</strong> • Chapter {currentChapter}
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setEditorViewMode("editor")}>
+                      ✏️ Edit Draft
+                    </button>
+                  </div>
+
+                  <div className="word-manuscript-paper">
+                    <h1>{project.chapters[currentChapter]?.title || `Chapter ${currentChapter}`}</h1>
+                    {parseBlocks(editorText).map((block, idx) => {
+                      if (block.type === "heading") {
+                        return <h2 key={idx}>{block.text}</h2>;
+                      }
+                      if (block.type === "table") {
+                        return (
+                          <div key={idx} className="apa-preview-table-wrap">
+                            {block.caption && <div className="apa-table-caption"><em>{block.caption}</em></div>}
+                            <table className="apa-preview-table">
+                              <thead>
+                                <tr>
+                                  {block.headers.map((h, i) => (
+                                    <th key={i}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {block.rows.map((row, rIdx) => (
+                                  <tr key={rIdx}>
+                                    {row.map((cell, cIdx) => (
+                                      <td key={cIdx}>{cell}</td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      }
+                      if (block.type === "diagram") {
+                        return (
+                          <div key={idx} className="diagram-preview-card">
+                            <MermaidDiagram code={block.code} id={`ch${currentChapter}-b${idx}`} />
+                            {block.caption && <div className="diagram-figure-caption">{block.caption}</div>}
+                          </div>
+                        );
+                      }
+                      if (block.type === "list") {
+                        return <p key={idx} className="list">{block.text}</p>;
+                      }
+                      return <p key={idx} className="paragraph">{block.text}</p>;
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </section>
 
@@ -1881,6 +2308,315 @@ export default function Home() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL 2: INTERACTIVE TABLE BUILDER
+         ======================================================== */}
+      {isTableModalOpen && (
+        <div className="modal-backdrop" onClick={() => setIsTableModalOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: "780px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="badge badge-cyan" style={{ marginBottom: "6px" }}>APA 7th Format</span>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "#ffffff" }}>
+                  Interactive Table Builder
+                </h3>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsTableModalOpen(false)}>✕</button>
+            </div>
+
+            <div className="modal-body">
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+                Design and populate your academic table. It will be inserted into your chapter and formatted as a genuine Word table upon export.
+              </p>
+
+              <div className="form-group">
+                <label className="form-label">Table Title / Caption</label>
+                <input
+                  className="form-input"
+                  value={tableCaption}
+                  onChange={(e) => setTableCaption(e.target.value)}
+                  placeholder="e.g. Table 4.1: Demographic Characteristics of Respondents"
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "16px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: "600" }}>Presets:</span>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyTablePreset("demographic")}>
+                  Demographics
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyTablePreset("evaluation")}>
+                  Model Evaluation
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyTablePreset("specs")}>
+                  System Specs
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyTablePreset("custom")}>
+                  Reset Blank
+                </button>
+              </div>
+
+              <div className="table-builder-grid-wrap">
+                <table className="table-builder-table">
+                  <thead>
+                    <tr>
+                      {tableHeaders.map((header, colIdx) => (
+                        <th key={colIdx}>
+                          <input
+                            value={header}
+                            onChange={(e) => {
+                              const updated = [...tableHeaders];
+                              updated[colIdx] = e.target.value;
+                              setTableHeaders(updated);
+                            }}
+                            placeholder={`Header ${colIdx + 1}`}
+                          />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableRowsData.map((row, rowIdx) => (
+                      <tr key={rowIdx}>
+                        {row.map((cell, colIdx) => (
+                          <td key={colIdx}>
+                            <input
+                              value={cell}
+                              onChange={(e) => {
+                                const updated = tableRowsData.map((r, rI) =>
+                                  rI === rowIdx ? r.map((c, cI) => (cI === colIdx ? e.target.value : c)) : r
+                                );
+                                setTableRowsData(updated);
+                              }}
+                              placeholder="Value..."
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    const newRow = new Array(tableHeaders.length).fill("");
+                    setTableRowsData([...tableRowsData, newRow]);
+                  }}
+                >
+                  + Add Row
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    if (tableHeaders.length < 8) {
+                      setTableHeaders([...tableHeaders, `Column ${tableHeaders.length + 1}`]);
+                      setTableRowsData(tableRowsData.map((r) => [...r, ""]));
+                    }
+                  }}
+                >
+                  + Add Column
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setIsTableModalOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={handleInsertTableIntoEditor}>
+                ⊞ Insert Table into Manuscript
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL 3: DIAGRAM STUDIO (DRAW / INSERT DIAGRAM)
+         ======================================================== */}
+      {isDiagramModalOpen && (
+        <div className="modal-backdrop" onClick={() => setIsDiagramModalOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: "880px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="badge badge-violet" style={{ marginBottom: "6px" }}>Academic Visuals</span>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "#ffffff" }}>
+                  Academic Diagram & Flowchart Studio
+                </h3>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsDiagramModalOpen(false)}>✕</button>
+            </div>
+
+            <div className="modal-body">
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+                Draw process flows, system architectures, and conceptual frameworks. Live SVG preview updates as you type.
+              </p>
+
+              <div className="form-group">
+                <label className="form-label">Figure Title / Caption</label>
+                <input
+                  className="form-input"
+                  value={diagramModalCaption}
+                  onChange={(e) => setDiagramModalCaption(e.target.value)}
+                  placeholder="e.g. Figure 4.1: Research Methodology Flowchart"
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "14px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: "600" }}>Diagram Presets:</span>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyDiagramPreset("flowchart")}>
+                  Process Flowchart
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyDiagramPreset("architecture")}>
+                  System Architecture
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyDiagramPreset("framework")}>
+                  Conceptual Framework
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyDiagramPreset("sequence")}>
+                  Sequence Flow
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", minHeight: "280px" }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: "0.8rem" }}>Mermaid Diagram Definition</label>
+                  <textarea
+                    className="form-input"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem", height: "260px", resize: "none" }}
+                    value={diagramModalCode}
+                    onChange={(e) => setDiagramModalCode(e.target.value)}
+                    placeholder="Enter Mermaid diagram code..."
+                  />
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: "0.8rem" }}>Live Visual Rendering</label>
+                  <div
+                    ref={diagramModalPreviewRef}
+                    style={{
+                      height: "260px",
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid rgba(255, 255, 255, 0.08)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: "16px",
+                      overflow: "auto",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setIsDiagramModalOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={handleInsertDiagramIntoEditor}>
+                📊 Insert Diagram into Manuscript
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL 4: GEMINI API KEY FAILOVER POOL MANAGER
+         ======================================================== */}
+      {isKeyModalOpen && (
+        <div className="modal-backdrop" onClick={() => setIsKeyModalOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="badge badge-emerald" style={{ marginBottom: "6px" }}>Auto-Failover Active</span>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "#ffffff" }}>
+                  Gemini API Key Failover Pool
+                </h3>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsKeyModalOpen(false)}>✕</button>
+            </div>
+
+            <div className="modal-body">
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+                When writing limits or hourly quotas (429) are reached on one key, ProjectPilot automatically fails over to the next available backup key in the rotation pool so your writing is never interrupted.
+              </p>
+
+              <div style={{ fontSize: "0.85rem", fontWeight: "700", color: "#ffffff", marginBottom: "8px" }}>
+                Configured Key Pool ({keysStatus.totalKeys || 3} Active):
+              </div>
+
+              <div className="key-pool-list">
+                {(keysStatus.keys && keysStatus.keys.length > 0
+                  ? keysStatus.keys
+                  : [
+                      { index: 1, preview: "AQ.Ab8...NwNwQ", isActive: true },
+                      { index: 2, preview: "AQ.Ab8...fZ4w", isActive: false },
+                      { index: 3, preview: "AQ.Ab8...JGWA", isActive: false }
+                    ]
+                ).map((k) => (
+                  <div key={k.index} className={`key-pool-item ${k.isActive ? "active" : ""}`}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "1.1rem" }}>{k.isActive ? "🟢" : "🛡️"}</span>
+                      <div>
+                        <div style={{ fontSize: "0.88rem", fontWeight: "600", color: "#ffffff" }}>
+                          API Key #{k.index}
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                          {k.preview}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`badge ${k.isActive ? "badge-emerald" : "badge-violet"}`}>
+                      {k.isActive ? "Active Writing Key" : "Standby Backup"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="form-group" style={{ marginTop: "20px" }}>
+                <label className="form-label">Add / Override Custom API Key in Browser (Optional)</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  value={customApiKey}
+                  onChange={(e) => setCustomApiKey(e.target.value)}
+                  placeholder="Paste additional Gemini API key..."
+                />
+                {customKeyError && <p className="form-error">{customKeyError}</p>}
+                <p className="upload-help">
+                  Keys are stored locally in your browser and used as top priority before falling back to .env.local keys.
+                </p>
+              </div>
+
+              {customApiKey && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: "#f87171", padding: "4px 8px" }}
+                  onClick={handleClearCustomKey}
+                >
+                  Clear Browser Key
+                </button>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setIsKeyModalOpen(false)}>
+                Close
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveCustomKey}>
+                Save & Activate Key
+              </button>
+            </div>
           </div>
         </div>
       )}
