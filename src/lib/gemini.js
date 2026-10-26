@@ -1,9 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 
-export const GEMINI_TEXT_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+export const GEMINI_TEXT_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 export const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-nano-banana-2.1";
 
 let currentKeyIndex = 0;
+// Map of apiKey -> timestamp until when it is considered exhausted
+const exhaustedKeyCooldowns = new Map();
+const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
  * Returns a list of all configured Gemini API keys from environment and optional client header.
@@ -61,16 +64,23 @@ export function getGeminiKeysPool(headerKey = null) {
  */
 export function getKeysStatus(headerKey = null) {
   const keys = getGeminiKeysPool(headerKey);
+  const now = Date.now();
   const activeIdx = keys.length > 0 ? currentKeyIndex % keys.length : 0;
 
   return {
     totalKeys: keys.length,
     activeKeyIndex: activeIdx,
-    keys: keys.map((key, index) => ({
-      index: index + 1,
-      preview: key.length > 12 ? `${key.slice(0, 7)}...${key.slice(-5)}` : "Key configured",
-      isActive: index === activeIdx
-    }))
+    model: GEMINI_TEXT_MODEL,
+    keys: keys.map((key, index) => {
+      const cooldownUntil = exhaustedKeyCooldowns.get(key) || 0;
+      const isExhausted = cooldownUntil > now;
+      return {
+        index: index + 1,
+        preview: key.length > 12 ? `${key.slice(0, 7)}...${key.slice(-5)}` : "Key configured",
+        isActive: index === activeIdx && !isExhausted,
+        status: isExhausted ? "quota_paused" : (index === activeIdx ? "active" : "standby")
+      };
+    })
   };
 }
 
@@ -105,7 +115,7 @@ function isRateLimitError(error) {
 
 /**
  * Executes an AI operation with automatic failover rotation through the pool of configured keys.
- * If one key encounters a writing limit (429 / quota / resource_exhausted), it switches to the next key and retries.
+ * Fast-skips known exhausted keys to eliminate the 35-second Google client retry hang.
  */
 export async function executeWithKeyRotation(taskFn, headerKey = null) {
   const keys = getGeminiKeysPool(headerKey);
@@ -113,25 +123,32 @@ export async function executeWithKeyRotation(taskFn, headerKey = null) {
     throw new Error("AI is not configured. Add GEMINI_API_KEY to .env.local and restart the app.");
   }
 
-  const startIndex = currentKeyIndex % keys.length;
+  const now = Date.now();
+  // Filter available healthy keys first (not currently in quota cooldown)
+  const healthyKeys = keys.filter((k) => (exhaustedKeyCooldowns.get(k) || 0) <= now);
+  const candidateKeys = healthyKeys.length > 0 ? healthyKeys : keys; // fallback to all if all on cooldown
+
   let lastError = null;
 
-  for (let attempt = 0; attempt < keys.length; attempt++) {
-    const keyIndex = (startIndex + attempt) % keys.length;
-    const apiKey = keys[keyIndex];
+  for (let attempt = 0; attempt < candidateKeys.length; attempt++) {
+    const apiKey = candidateKeys[(currentKeyIndex + attempt) % candidateKeys.length];
+    const keyGlobalIndex = keys.indexOf(apiKey);
     const client = new GoogleGenAI({ apiKey });
 
     try {
-      const result = await taskFn(client, apiKey, keyIndex);
-      // Success: retain this key as the active key
-      currentKeyIndex = keyIndex;
+      const result = await taskFn(client, apiKey, keyGlobalIndex);
+      // Success! Remember this key as active and clear any cooldown
+      exhaustedKeyCooldowns.delete(apiKey);
+      currentKeyIndex = keyGlobalIndex >= 0 ? keyGlobalIndex : 0;
       return result;
     } catch (error) {
       lastError = error;
-      if (isRateLimitError(error) && attempt < keys.length - 1) {
-        const nextIdx = (keyIndex + 1) % keys.length;
+      if (isRateLimitError(error)) {
+        // Mark this key in cooldown so subsequent requests don't waste 35s on it
+        exhaustedKeyCooldowns.set(apiKey, Date.now() + COOLDOWN_MS);
+        const nextIdx = (keyGlobalIndex + 1) % keys.length;
         console.warn(
-          `[Gemini Auto-Failover] Key #${keyIndex + 1} reached quota/limit. Switching to backup key #${nextIdx + 1}...`
+          `[Gemini Auto-Failover] Key #${keyGlobalIndex + 1} reached quota/rate-limit. Marking in 10m cooldown. Switching to backup key #${nextIdx + 1}...`
         );
         currentKeyIndex = nextIdx;
         continue;

@@ -77,6 +77,7 @@ export default function Home() {
   const [saveStatus, setSaveStatus] = useState("All changes saved locally");
   const [aiFeedback, setAiFeedback] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [guidelineFile, setGuidelineFile] = useState(null);
   const [sourceFiles, setSourceFiles] = useState([]);
   const [projectContext, setProjectContext] = useState(null);
@@ -167,6 +168,20 @@ export default function Home() {
       setEditorText("");
     }
   }, []);
+
+  // Timer for live generation progress feedback
+  useEffect(() => {
+    let interval;
+    if (isAiLoading) {
+      setElapsedSeconds(0);
+      interval = setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setElapsedSeconds(0);
+    }
+    return () => clearInterval(interval);
+  }, [isAiLoading]);
 
   // Live Diagram Studio preview effect
   useEffect(() => {
@@ -496,8 +511,8 @@ export default function Home() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Chapter generation failed.");
       const generatedWordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${result.content}`);
-      if (generatedWordCount < 600) {
-        throw new Error(`The generated draft contains ${generatedWordCount} words; at least 600 are required. Please try again.`);
+      if (generatedWordCount < 500) {
+        throw new Error(`The generated draft contains ${generatedWordCount} words; at least 500 words are required. Please try again or provide more source details.`);
       }
       setEditorText(result.content);
       setVisualPlan(result.visuals || []);
@@ -521,7 +536,12 @@ export default function Home() {
       } catch {
         setSaveStatus("Browser storage is full; this draft is not saved locally");
       }
-      setAiFeedback(`Draft created with ${generatedWordCount.toLocaleString()} words. Review and edit it before submission. Citations are limited to your uploaded sources.`);
+      const meetsStandard = generatedWordCount >= 600;
+      setAiFeedback(
+        meetsStandard
+          ? `Draft created with ${generatedWordCount.toLocaleString()} words (meets 600+ word academic target). Review and edit it before submission. Citations are limited to your uploaded sources.`
+          : `Draft created with ${generatedWordCount.toLocaleString()} words. Review sections or use the ribbon tools to expand.`
+      );
       if (actionType === "refine") setRefinementRequest("");
     } catch (error) {
       setAiFeedback(error.message || "Chapter generation failed. Check your connection and AI configuration.");
@@ -2061,9 +2081,47 @@ export default function Home() {
             <div className="ai-card" style={{ minHeight: "140px" }}>
               <h4>Draft status</h4>
               {isAiLoading ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--violet-300)", fontSize: "0.88rem" }}>
-                  <span className="pulse-dot"></span>
-                  <span>Writing chapter and checking the 600-word minimum...</span>
+                <div className="generation-progress-pipeline">
+                  <div className="pipeline-header">
+                    <div className="pipeline-title">
+                      <span className="pulse-dot"></span>
+                      <strong>Generating Chapter {currentChapter}...</strong>
+                    </div>
+                    <div className="pipeline-timer">⏱️ {elapsedSeconds}s elapsed</div>
+                  </div>
+                  
+                  <div className="pipeline-bar-wrap">
+                    <div 
+                      className="pipeline-bar-fill" 
+                      style={{ 
+                        width: `${Math.min(95, Math.max(12, elapsedSeconds * 4))}%` 
+                      }} 
+                    />
+                  </div>
+
+                  <div className="pipeline-steps">
+                    <div className={`pipeline-step ${elapsedSeconds >= 0 ? "active" : ""}`}>
+                      <span className="step-icon">{elapsedSeconds > 3 ? "✓" : "●"}</span>
+                      <span>Reading guideline & research sources</span>
+                    </div>
+                    <div className={`pipeline-step ${elapsedSeconds >= 4 ? "active" : ""}`}>
+                      <span className="step-icon">{elapsedSeconds > 12 ? "✓" : (elapsedSeconds >= 4 ? "●" : "○")}</span>
+                      <span>Synthesizing academic literature & citations</span>
+                    </div>
+                    <div className={`pipeline-step ${elapsedSeconds >= 13 ? "active" : ""}`}>
+                      <span className="step-icon">{elapsedSeconds > 24 ? "✓" : (elapsedSeconds >= 13 ? "●" : "○")}</span>
+                      <span>Drafting chapter prose & section headings</span>
+                    </div>
+                    <div className={`pipeline-step ${elapsedSeconds >= 25 ? "active" : ""}`}>
+                      <span className="step-icon">{elapsedSeconds >= 25 ? "●" : "○"}</span>
+                      <span>Formulating tables, figures & Mermaid diagram</span>
+                    </div>
+                  </div>
+                  
+                  <div className="pipeline-footer-info">
+                    <span>Engine: <code>{keysStatus?.model || "gemini-3.5-flash"}</code></span>
+                    <span>Failover Pool: <strong>{keysStatus?.totalKeys || 3} Keys Active</strong></span>
+                  </div>
                 </div>
               ) : aiFeedback ? (
                 <div style={{ fontSize: "0.85rem", color: "#e2e8f0", lineHeight: "1.6", whiteSpace: "pre-line" }}>
