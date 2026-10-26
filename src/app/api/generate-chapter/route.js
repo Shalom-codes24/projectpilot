@@ -218,20 +218,61 @@ Requirements:
       );
     }
 
+    let finalContent = chapterResult.content;
+    const validDiagram =
+      typeof chapterResult.diagram === "string" &&
+      chapterResult.diagram.length <= 5000 &&
+      /^\s*(?:flowchart|graph|erDiagram|sequenceDiagram|classDiagram|stateDiagram)\b/m.test(chapterResult.diagram)
+        ? chapterResult.diagram.trim()
+        : "";
+
+    // Auto-insert diagram directly into the most relevant section if not already present
+    if (validDiagram && !finalContent.includes("```mermaid")) {
+      const chapterNum = chapter?.number || 1;
+      const figureLabel = `Figure ${chapterNum}.1: System Flowchart and Conceptual Framework`;
+      const diagramMarkdown = `\n\n${figureLabel}\n\`\`\`mermaid\n${validDiagram}\n\`\`\`\n*${figureLabel}.*\n\n`;
+
+      const lines = finalContent.split("\n");
+      let insertIndex = -1;
+
+      // Scan for the most relevant section header keyword (Architecture, Methodology, Framework, Analysis)
+      const priorityRegex = /(?:architecture|design|framework|methodology|model|workflow|process|analysis|data presentation)/i;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if ((line.startsWith("#") || /^\d+\.\d+/.test(line)) && priorityRegex.test(line)) {
+          // Found matching section heading: place after this section's paragraphs before next heading
+          let j = i + 1;
+          while (j < lines.length) {
+            const nextLine = lines[j].trim();
+            if (nextLine.startsWith("#") || /^\d+\.\d+\s+[A-Z]/.test(nextLine)) {
+              break;
+            }
+            j++;
+          }
+          insertIndex = j;
+          break;
+        }
+      }
+
+      // If no matching priority heading found, insert before summary / conclusion or at ~65% mark
+      if (insertIndex === -1) {
+        insertIndex = Math.max(1, Math.floor(lines.length * 0.65));
+      }
+
+      lines.splice(insertIndex, 0, diagramMarkdown);
+      finalContent = lines.join("\n");
+    }
+
     return Response.json({
-      content: chapterResult.content,
+      content: finalContent,
       visuals: chapterResult.visuals.slice(0, 5).map((visual) => ({
         title: typeof visual?.title === "string" ? visual.title.slice(0, 200) : "Suggested project visual",
         placement: typeof visual?.placement === "string" ? visual.placement.slice(0, 300) : "Placement to be confirmed",
         caption: typeof visual?.caption === "string" ? visual.caption.slice(0, 500) : "",
         imagePrompt: typeof visual?.imagePrompt === "string" ? visual.imagePrompt.slice(0, 2000) : ""
       })),
-      diagram:
-        typeof chapterResult.diagram === "string" &&
-        chapterResult.diagram.length <= 5000 &&
-        /^\s*(?:flowchart|graph|erDiagram)\b/m.test(chapterResult.diagram)
-          ? chapterResult.diagram
-          : ""
+      diagram: validDiagram
     });
   } catch (error) {
     const status = error.status === 429 ? 429 : 502;

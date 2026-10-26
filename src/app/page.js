@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { countChapterWords } from "../lib/word-count";
 import { buildDocxBlob, buildPrintableHtml, manuscriptFileName, parseBlocks } from "../lib/export-manuscript";
 import { formatReference } from "../lib/references";
-import { CHAPTER_STRUCTURES, buildChapters, exportWarnings } from "../lib/nigerian-format";
+import { CHAPTER_STRUCTURES, buildChapters, exportWarnings, getSampleDedication, getSampleAcknowledgements, getSampleAbstract } from "../lib/nigerian-format";
 
 const EMPTY_PROJECT = {
   id: "",
@@ -21,7 +21,10 @@ const EMPTY_PROJECT = {
   targetDate: "",
   projectType: "empirical",
   chapters: buildChapters("standard"),
-  frontMatter: {},
+  frontMatter: {
+    dedication: getSampleDedication(),
+    acknowledgements: getSampleAcknowledgements()
+  },
   appendices: "",
   references: [],
   supervisorNotes: []
@@ -510,11 +513,19 @@ export default function Home() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Chapter generation failed.");
-      const generatedWordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${result.content}`);
+      
+      let finalDraftContent = result.content;
+      // Auto-insert diagram directly into the draft if not already in the text
+      if (result.diagram && !finalDraftContent.includes("```mermaid")) {
+        const figureLabel = `Figure ${currentChapter}.1: System Flowchart and Conceptual Framework`;
+        finalDraftContent = `${finalDraftContent.trim()}\n\n${figureLabel}\n\`\`\`mermaid\n${result.diagram.trim()}\n\`\`\`\n*${figureLabel}.*\n`;
+      }
+
+      const generatedWordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${finalDraftContent}`);
       if (generatedWordCount < 500) {
         throw new Error(`The generated draft contains ${generatedWordCount} words; at least 500 words are required. Please try again or provide more source details.`);
       }
-      setEditorText(result.content);
+      setEditorText(finalDraftContent);
       setVisualPlan(result.visuals || []);
       setDiagramCode(result.diagram || "");
       const updatedProject = {
@@ -523,7 +534,7 @@ export default function Home() {
           ...project.chapters,
           [currentChapter]: {
             ...project.chapters[currentChapter],
-            content: result.content,
+            content: finalDraftContent,
             progress: Math.max(project.chapters[currentChapter]?.progress || 0, 25)
           }
         }
@@ -1998,19 +2009,139 @@ export default function Home() {
 
             <div className="ai-card">
               <h4>Front matter and appendices</h4>
-              <p className="visual-plan-note">Title page, declaration, certification, table of contents, lists of tables and figures (from &ldquo;Table 4.1 ...&rdquo; captions), and references are built automatically. Write the pages below in your own words; they appear in the export only when filled in.</p>
-              <label className="form-label" htmlFor="fm-dedication">Dedication (short, optional)</label>
-              <textarea id="fm-dedication" className="refinement-input" rows="2" value={project.frontMatter?.dedication || ""} onChange={(e) => setFrontMatter("dedication", e.target.value)} />
-              <label className="form-label" htmlFor="fm-ack">Acknowledgements (one page maximum)</label>
-              <textarea id="fm-ack" className="refinement-input" rows="4" value={project.frontMatter?.acknowledgements || ""} onChange={(e) => setFrontMatter("acknowledgements", e.target.value)} />
-              <label className="form-label" htmlFor="fm-abstract">Abstract (150&ndash;300 words; write it last)</label>
-              <textarea id="fm-abstract" className="refinement-input" rows="6" value={project.frontMatter?.abstract || ""} onChange={(e) => setFrontMatter("abstract", e.target.value)} />
-              <button className="btn btn-secondary btn-sm" onClick={generateAbstract} disabled={isAbstractLoading}>
-                {isAbstractLoading ? "Drafting abstract..." : "Draft abstract from my chapters"}
-              </button>
-              <label className="form-label" htmlFor="fm-abbr">List of abbreviations (optional)</label>
+              <p className="visual-plan-note">
+                Title page, declaration, certification, table of contents, lists of tables and figures, and references are generated automatically. 
+                Use the candidate fields below to set your details, and load pre-formatted Nigerian sample templates for Dedication, Acknowledgements, and Abstract.
+              </p>
+
+              {/* Candidate & Project Metadata Live Editor */}
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "14px", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                  <h5 style={{ margin: 0, color: "var(--violet-300)", fontSize: "0.86rem", fontWeight: 600 }}>🎓 Candidate & Supervisor Information</h5>
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Pre-fills title page, declaration & certification</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div>
+                    <label className="form-label" style={{ fontSize: "0.76rem" }}>Student Full Name</label>
+                    <input
+                      className="form-input"
+                      style={{ fontSize: "0.82rem", padding: "6px 10px" }}
+                      placeholder="e.g. ADEDOKUN, Samuel Oluwaseun"
+                      value={project.studentName || ""}
+                      onChange={(e) => persistProject({ ...project, studentName: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontSize: "0.76rem" }}>Matriculation Number</label>
+                    <input
+                      className="form-input"
+                      style={{ fontSize: "0.82rem", padding: "6px 10px" }}
+                      placeholder="e.g. 190408012 / UNILAG/2019/..."
+                      value={project.matricNumber || ""}
+                      onChange={(e) => persistProject({ ...project, matricNumber: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontSize: "0.76rem" }}>Project Supervisor</label>
+                    <input
+                      className="form-input"
+                      style={{ fontSize: "0.82rem", padding: "6px 10px" }}
+                      placeholder="e.g. Dr. A. B. Adeleke"
+                      value={project.supervisor || ""}
+                      onChange={(e) => persistProject({ ...project, supervisor: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontSize: "0.76rem" }}>Department / Degree</label>
+                    <input
+                      className="form-input"
+                      style={{ fontSize: "0.82rem", padding: "6px 10px" }}
+                      placeholder="e.g. Computer Science"
+                      value={project.department || ""}
+                      onChange={(e) => persistProject({ ...project, department: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Dedication with Sample Button */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px", marginBottom: "4px" }}>
+                <label className="form-label" htmlFor="fm-dedication" style={{ margin: 0 }}>Dedication (short, optional)</label>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: "0.72rem", padding: "3px 8px" }}
+                  onClick={() => setFrontMatter("dedication", getSampleDedication(project))}
+                >
+                  ⚡ Load Nigerian Dedication Sample
+                </button>
+              </div>
+              <textarea
+                id="fm-dedication"
+                className="refinement-input"
+                rows="3"
+                value={project.frontMatter?.dedication || ""}
+                onChange={(e) => setFrontMatter("dedication", e.target.value)}
+                placeholder="Dedicate your work to God, family, or mentors..."
+              />
+
+              {/* Acknowledgements with Sample Button */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", marginBottom: "4px" }}>
+                <label className="form-label" htmlFor="fm-ack" style={{ margin: 0 }}>Acknowledgements (one page maximum)</label>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: "0.72rem", padding: "3px 8px" }}
+                  onClick={() => setFrontMatter("acknowledgements", getSampleAcknowledgements(project))}
+                >
+                  ⚡ Load Nigerian Acknowledgements Sample
+                </button>
+              </div>
+              <textarea
+                id="fm-ack"
+                className="refinement-input"
+                rows="4"
+                value={project.frontMatter?.acknowledgements || ""}
+                onChange={(e) => setFrontMatter("acknowledgements", e.target.value)}
+                placeholder="Acknowledge God, your supervisor, department, family, and colleagues..."
+              />
+
+              {/* Abstract with Sample and AI Drafting Buttons */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", marginBottom: "4px" }}>
+                <label className="form-label" htmlFor="fm-abstract" style={{ margin: 0 }}>Abstract (150&ndash;300 words)</label>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: "0.72rem", padding: "3px 8px" }}
+                    onClick={() => setFrontMatter("abstract", getSampleAbstract(project))}
+                  >
+                    ⚡ Load Academic Abstract Sample
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ fontSize: "0.72rem", padding: "3px 8px" }}
+                    onClick={generateAbstract}
+                    disabled={isAbstractLoading}
+                  >
+                    {isAbstractLoading ? "Drafting with AI..." : "✨ Draft from Chapters (AI)"}
+                  </button>
+                </div>
+              </div>
+              <textarea
+                id="fm-abstract"
+                className="refinement-input"
+                rows="6"
+                value={project.frontMatter?.abstract || ""}
+                onChange={(e) => setFrontMatter("abstract", e.target.value)}
+                placeholder="Comprehensive academic abstract: background, methodology, empirical findings, and recommendations..."
+              />
+
+              <label className="form-label" htmlFor="fm-abbr" style={{ marginTop: "14px" }}>List of abbreviations (optional)</label>
               <textarea id="fm-abbr" className="refinement-input" rows="3" value={project.frontMatter?.abbreviations || ""} onChange={(e) => setFrontMatter("abbreviations", e.target.value)} />
-              <label className="form-label" htmlFor="appendices">Appendices (questionnaires, raw data, letters, code; start each with &ldquo;Appendix A&rdquo;)</label>
+              
+              <label className="form-label" htmlFor="appendices" style={{ marginTop: "14px" }}>Appendices (questionnaires, raw data, letters, code; start each with &ldquo;Appendix A&rdquo;)</label>
               <textarea id="appendices" className="refinement-input" rows="4" value={project.appendices || ""} onChange={(e) => persistProject({ ...project, appendices: e.target.value })} />
             </div>
 

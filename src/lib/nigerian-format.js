@@ -185,3 +185,21 @@ export function exportWarnings(project) {
   }
   return warnings;
 }
+
+export function getSampleDedication(project = {}) {
+  return `This project is dedicated to the Almighty God, the fountain of all wisdom, knowledge, and understanding, whose grace, mercy, and divine protection sustained me throughout the duration of this academic programme.\n\nIt is also affectionately dedicated to my beloved parents and family members, whose unconditional love, continuous prayers, moral guidance, and selfless sacrifices laid the solid foundation for my academic accomplishments.`;
+}
+
+export function getSampleAcknowledgements(project = {}) {
+  const supervisor = project.supervisor || "[Supervisor's Name]";
+  const dept = project.department || "Computer Science";
+  const institution = project.institution || "the University";
+  return `First and foremost, I offer my profound adoration to the Almighty God for His divine grace, strength, and guidance in bringing this project to a successful completion.\n\nI express my heartfelt gratitude to my project supervisor, ${supervisor}, for the scholarly guidance, meticulous reviews, valuable critiques, and inspiring mentorship provided throughout the course of this research.\n\nMy sincere appreciation goes to the Head of Department and the esteemed academic and administrative staff of the Department of ${dept}, ${institution}, for imparting knowledge and maintaining high academic standards.\n\nI am deeply indebted to my loving parents, siblings, and family for their enduring support, prayers, and sacrifices. Finally, I appreciate my friends, colleagues, and coursemates for their camaraderie, constructive discussions, and solidarity throughout this academic journey.`;
+}
+
+export function getSampleAbstract(project = {}) {
+  const title = project.title || "this study";
+  const dept = project.department || "the respective field";
+  return `This study examines the conceptual, methodological, and empirical dimensions of ${title} in the context of contemporary developments within Nigeria. The research addresses critical operational challenges, evaluating systemic efficacy and proposing sustainable optimization mechanisms.\n\nEmploying an empirical investigative design, relevant data were gathered through structured instruments and analyzed in conformity with standard departmental guidelines. Descriptive and inferential evaluations were conducted to establish relationships between key variables and validate operational assumptions.\n\nThe findings reveal that targeted structural interventions significantly enhance operational efficiency, while identifying key infrastructural and institutional constraints that impede optimal performance. The empirical outcomes underscore the necessity of adopting structured frameworks to resolve prevailing bottlenecks.\n\nConsequently, the study recommends strategic policy improvements, enhanced stakeholder training, and continuous monitoring frameworks to foster sustainable performance and practical adoption across ${dept} and related institutions.`;
+}
+
