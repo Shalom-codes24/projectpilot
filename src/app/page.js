@@ -2068,16 +2068,18 @@ export default function Home() {
               </select>
               <textarea
                 className="refinement-input"
-                rows="5"
+                rows="4"
                 value={project.findings || ""}
                 onChange={(e) => setFindings(e.target.value)}
                 placeholder={
                   (project.projectType || "empirical") === "empirical"
-                    ? "Paste your real results: analysed tables, statistics, interview themes. Results chapters use only this text."
-                    : "Paste your real outputs: design decisions, system description, argument, or review conclusions."
+                    ? "Paste real data/results (optional): e.g. 150 surveyed teachers, 78% agreement, t=2.34. If left blank, ProjectPilot acts as the student to self-generate realistic raw data, demographic tables, and statistical results!"
+                    : "Paste system outputs (optional): performance metrics, benchmark results, or test cases. If left blank, ProjectPilot acts as the student to self-generate realistic specifications."
                 }
               />
-              <p className="visual-plan-note">The author writes full academic analysis, research data tables, and methodology grounded in your project materials.</p>
+              <p className="visual-plan-note" style={{ color: "var(--violet-200)", lineHeight: "1.4" }}>
+                💡 <strong>Student-Proxy Data Generation:</strong> If you do not have survey or test numbers yet, the AI acts as the student to self-generate realistic raw data tables and statistical findings so your chapter is 100% complete and ready. You can easily adjust the figures later!
+              </p>
               <button className="btn btn-secondary btn-sm" onClick={buildOutlineFromGuideline} disabled={isOutlineLoading || !projectContext}>
                 {isOutlineLoading ? "Reading guideline..." : "Build outline from guideline"}
               </button>
