@@ -146,19 +146,32 @@ export function collectCaptions(chapters) {
   const tables = [];
   const figures = [];
   for (const chapter of Object.values(chapters)) {
-    for (const line of (chapter.content || "").split("\n")) {
-      if (!CAPTION_PATTERN.test(line) || /[,;]$/.test(line.trim())) continue;
-      (/^\s*table/i.test(line) ? tables : figures).push(line.trim());
+    for (const rawLine of (chapter.content || "").split("\n")) {
+      const line = rawLine
+        .replace(/^#{1,6}\s*/, "")
+        .replace(/^\*\*+|\*\*+$/g, "")
+        .replace(/<br\s*\/?>/gi, "")
+        .trim();
+      if (!CAPTION_PATTERN.test(line) || /[,;]$/.test(line)) continue;
+      (/^\s*table/i.test(line) ? tables : figures).push(line);
     }
   }
   return { tables, figures };
 }
 
-export function requiredPages(project) {
+export function requiredPages(project, maxChapter = null) {
+  const isProposal = Boolean(maxChapter && maxChapter <= 3);
   const listed = (project.preliminaryPages || []).map((name) => name.toLowerCase());
-  const { tables, figures } = collectCaptions(project.chapters || {});
+  const filteredChapters = Object.fromEntries(
+    Object.entries(project.chapters || {}).filter(([num]) => (maxChapter ? Number(num) <= maxChapter : true))
+  );
+  const { tables, figures } = collectCaptions(filteredChapters);
   const frontMatter = project.frontMatter || {};
   return PRELIMINARY_PAGES.filter((page) => {
+    // In proposal defense (Chapters 1-3), an abstract is optional since empirical findings are not yet gathered.
+    if (isProposal && page.key === "abstract") {
+      return Boolean(frontMatter.abstract?.trim());
+    }
     const inGuideline = listed.some((name) => page.match.some((word) => name.includes(word)));
     if (page.key === "tables") return tables.length > 0;
     if (page.key === "figures") return figures.length > 0;
@@ -168,10 +181,11 @@ export function requiredPages(project) {
   });
 }
 
-export function exportWarnings(project) {
+export function exportWarnings(project, maxChapter = null) {
   const warnings = [];
+  const isProposal = Boolean(maxChapter && maxChapter <= 3);
   const listed = (project.preliminaryPages || []).map((name) => name.toLowerCase());
-  const abstractRequired = listed.length === 0 || listed.some((name) => name.includes("abstract"));
+  const abstractRequired = !isProposal && (listed.length === 0 || listed.some((name) => name.includes("abstract")));
   if (abstractRequired && !project.frontMatter?.abstract?.trim()) {
     warnings.push("The abstract is missing (150–300 words; write it last).");
   }
@@ -180,11 +194,12 @@ export function exportWarnings(project) {
   if (!project.supervisor) warnings.push("No supervisor is set for the certification page.");
   if (!project.studentName || !project.matricNumber) warnings.push("The student name or matric number is missing from the title page.");
   const abstractWords = (project.frontMatter?.abstract || "").trim().split(/\s+/).filter(Boolean).length;
-  if (abstractWords > 0 && (abstractWords < 150 || abstractWords > 300)) {
+  if (!isProposal && abstractWords > 0 && (abstractWords < 150 || abstractWords > 300)) {
     warnings.push(`The abstract has ${abstractWords} words; 150–300 is expected.`);
   }
   return warnings;
 }
+
 
 export function getSampleDedication(project = {}) {
   return `This project is dedicated to the Almighty God, the fountain of all wisdom, knowledge, and understanding, whose grace, mercy, and divine protection sustained me throughout the duration of this academic programme.\n\nIt is also affectionately dedicated to my beloved parents and family members, whose unconditional love, continuous prayers, moral guidance, and selfless sacrifices laid the solid foundation for my academic accomplishments.`;

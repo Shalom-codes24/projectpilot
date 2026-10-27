@@ -1,6 +1,7 @@
 import { countChapterWords } from "../../../lib/word-count";
 import { GEMINI_TEXT_MODEL, executeWithKeyRotation } from "../../../lib/gemini";
 import { sanitizeOrConvertMermaid } from "../../../lib/diagram-utils";
+import { sanitizeAcademicDraft } from "../../../lib/clean-draft";
 
 function cleanAndParseJson(text) {
   if (typeof text !== "string") return null;
@@ -166,11 +167,17 @@ STUDENT PROXY & RAW DATA SELF-GENERATION (MANDATORY):
    - For the "diagram" property and any markdown code blocks, you MUST ALWAYS provide valid Mermaid syntax starting with "flowchart TD" or "graph TD" or "sequenceDiagram".
    - CRITICAL: NEVER output ASCII text boxes with "+---+" or "|---|". Every node in Mermaid must use valid node definitions, e.g.:
      flowchart TD
-       step1["Step 1 Title<br/>Detailed description"] --> step2["Step 2 Title<br/>Detailed description"]
+       step1["Step 1 Title: Detailed description"] --> step2["Step 2 Title: Detailed description"]
 
-6. HEADING STRUCTURE & CITATIONS:
-   - Use the subsection headings listed in chapter.sections (e.g., 4.1 Data Presentation, 4.2 Analysis of Research Questions, 4.3 Testing of Hypotheses, 4.4 Discussion of Findings).
-   - Format each heading clearly on its own line (e.g., "## 4.1 Data Presentation").
+6. CLEAN DISSERTATION FORMATTING & ZERO MARKDOWN SIGNS (CRITICAL):
+   - NEVER use markdown heading hashes ("##", "###", "#"). Nigerian and international universities reject raw markdown code symbols in dissertation drafts.
+   - Format each heading clearly on its own line using standard university numbered headings, e.g.:
+     4.1 Data Presentation
+     4.2 Analysis of Research Questions
+     4.3 Testing of Hypotheses
+   - NEVER use HTML tags like "<br/>", "<br>", or "<p>" in the text, tables, or headings. Separate paragraphs using standard blank lines.
+   - NEVER output empty bold asterisks like "** **" or wrap entire headings in "**". Write headings as clean text on their own line.
+   - Deliver pure, clean, professional academic prose ready for immediate Microsoft Word submission without AI markdown artifacts.
    - Use scholarly third-person objective academic tone. Cite approved references in author-date format (e.g., Adebayo, 2021; Okeke & Musa, 2023).`,
       input: JSON.stringify({
         task: mode === "expand"
@@ -308,6 +315,9 @@ STUDENT PROXY & RAW DATA SELF-GENERATION (MANDATORY):
       lines.splice(insertIndex, 0, diagramMarkdown);
       finalContent = lines.join("\n");
     }
+
+    // Sanitize any remaining Gemini markdown artifacts (**, ##, <br/>)
+    finalContent = sanitizeAcademicDraft(finalContent);
 
     return Response.json({
       content: finalContent,

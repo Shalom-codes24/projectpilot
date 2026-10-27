@@ -1,5 +1,6 @@
-import { sortedReferences } from "./references";
-import { sanitizeOrConvertMermaid } from "./diagram-utils";
+import { sortedReferences } from "./references.js";
+import { sanitizeOrConvertMermaid } from "./diagram-utils.js";
+import { sanitizeAcademicDraft, cleanHeadingText } from "./clean-draft.js";
 import {
   DEFAULT_FORMATTING,
   awardName,
@@ -7,17 +8,18 @@ import {
   formatMonthYear,
   requiredPages,
   toTitleCase
-} from "./nigerian-format";
+} from "./nigerian-format.js";
 
 const HEADING_PATTERN = /^(?:chapter\s+\w+\b.*|\d+(?:\.\d+)+\s+\S.*|references|bibliography|appendix\b.*)$/i;
 
 export function isHeadingLine(line) {
-  const trimmed = line.trim();
-  return trimmed.length > 0 && trimmed.length <= 140 && !/[.;,]$/.test(trimmed) && HEADING_PATTERN.test(trimmed);
+  const cleaned = cleanHeadingText(line);
+  return cleaned.length > 0 && cleaned.length <= 140 && !/[.;,]$/.test(cleaned) && HEADING_PATTERN.test(cleaned);
 }
 
 export function parseBlocks(content = "") {
-  const normalized = content.replace(/\r\n/g, "\n");
+  const sanitized = sanitizeAcademicDraft(content);
+  const normalized = sanitized.replace(/\r\n/g, "\n");
   const rawBlocks = normalized.split(/\n{2,}/);
   const blocks = [];
 
@@ -69,7 +71,7 @@ export function parseBlocks(content = "") {
     for (const line of lines) {
       if (isHeadingLine(line)) {
         flush();
-        blocks.push({ type: "heading", text: toTitleCase(line) });
+        blocks.push({ type: "heading", text: toTitleCase(cleanHeadingText(line)) });
       } else if (/^(?:\d+[.)]|[-•*])\s+/.test(line)) {
         flush();
         blocks.push({ type: "list", text: line });
@@ -94,58 +96,74 @@ export function getFormatting(project) {
   };
 }
 
-function titlePageLines(project) {
+function titlePageLines(project, maxChapter = null) {
+  const isProposal = Boolean(maxChapter && maxChapter <= 3);
   const unit = [
-    `A PROJECT SUBMITTED TO THE DEPARTMENT OF ${(project.department || "").toUpperCase()}`,
+    isProposal
+      ? `A RESEARCH PROPOSAL SUBMITTED TO THE DEPARTMENT OF ${(project.department || "").toUpperCase()}`
+      : `A PROJECT SUBMITTED TO THE DEPARTMENT OF ${(project.department || "").toUpperCase()}`,
     project.faculty && `FACULTY OF ${project.faculty.toUpperCase().replace(/^FACULTY OF /, "")}`,
     (project.institution || "").toUpperCase()
   ].filter(Boolean);
   return [
     { text: (project.title || "").toUpperCase(), bold: true, size: 1.4 },
     { text: "" },
+    ...(isProposal
+      ? [
+          { text: "RESEARCH PROPOSAL (CHAPTERS 1 - 3)", bold: true, size: 1.15 },
+          { text: "" }
+        ]
+      : []),
     { text: "By" },
     { text: project.studentName, bold: true },
     project.matricNumber && { text: `Matric No: ${project.matricNumber}` },
     { text: "" },
     ...unit.map((text) => ({ text })),
     { text: "" },
-    { text: "IN PARTIAL FULFILMENT OF THE REQUIREMENTS FOR THE AWARD OF" },
+    {
+      text: isProposal
+        ? "IN PARTIAL FULFILMENT OF THE REQUIREMENTS FOR THE APPROVAL OF RESEARCH PROPOSAL LEADING TO THE AWARD OF"
+        : "IN PARTIAL FULFILMENT OF THE REQUIREMENTS FOR THE AWARD OF"
+    },
     { text: awardName(project.degree), bold: true },
     { text: "" },
     project.supervisor && { text: `Supervisor: ${project.supervisor}` },
     project.targetDate && { text: formatMonthYear(project.targetDate) }
-  ].filter((entry) => entry && entry.text !== undefined);
+  ].filter((entry) => entry && entry.text !== undefined && entry.text !== null);
 }
 
-function orderedChapters(project) {
+function orderedChapters(project, maxChapter = null) {
   return Object.keys(project.chapters)
     .map(Number)
+    .filter((num) => (maxChapter ? num <= maxChapter : true))
     .sort((a, b) => a - b)
     .map((number) => project.chapters[number]);
 }
 
-function standardPageParagraphs(key, project) {
+function standardPageParagraphs(key, project, maxChapter = null) {
+  const isProposal = Boolean(maxChapter && maxChapter <= 3);
+  const docType = isProposal ? "research proposal" : "project";
   const author = [project.studentName, project.matricNumber && `(${project.matricNumber})`].filter(Boolean).join(" ") || "the candidate";
   const unit = `Department of ${project.department || ""}${project.institution ? `, ${project.institution}` : ""}`;
   if (key === "declaration") {
     return [
-      `I, ${author}, hereby declare that this project, titled "${project.title}", was carried out by me and has not been submitted elsewhere for the award of any degree. All sources used have been acknowledged.`,
+      `I, ${author}, hereby declare that this ${docType}, titled "${project.title}", was carried out by me and has not been submitted elsewhere for the award of any degree or approval. All sources used have been acknowledged.`,
       "Signature: ______________________          Date: ______________________"
     ];
   }
   const lines = [
-    `This is to certify that this project, titled "${project.title}", was carried out by ${author} in the ${unit}${project.supervisor ? `, under the supervision of ${project.supervisor}` : ""}.`,
+    `This is to certify that this ${docType}, titled "${project.title}", was prepared and presented by ${author} in the ${unit}${project.supervisor ? `, under the supervision of ${project.supervisor}` : ""}.`,
     "Project Supervisor: ______________________          Date: ______________________",
     "Head of Department: ______________________          Date: ______________________"
   ];
-  if ((project.preliminaryPages || []).some((name) => /external/i.test(name)) || project.externalExaminer) {
+  if (!isProposal && ((project.preliminaryPages || []).some((name) => /external/i.test(name)) || project.externalExaminer)) {
     lines.push("External Examiner: ______________________          Date: ______________________");
   }
   return lines;
 }
 
-function pageBody(page, project, captions) {
-  if (page.kind === "standard") return standardPageParagraphs(page.key, project);
+function pageBody(page, project, captions, maxChapter = null) {
+  if (page.kind === "standard") return standardPageParagraphs(page.key, project, maxChapter);
   if (page.key === "tables") return captions.tables;
   if (page.key === "figures") return captions.figures;
   return (project.frontMatter?.[page.key] || "").trim().split(/\n{2,}/).filter(Boolean);
@@ -155,11 +173,16 @@ function referenceLines(project) {
   return sortedReferences(project.references || [], project.citationStyle);
 }
 
-export function manuscriptFileName(project) {
-  return `${(project.shortTitle || project.title || "project").replace(/[^a-zA-Z0-9]+/g, "_")}_Manuscript`;
+export function manuscriptFileName(project, maxChapter = null) {
+  const base = (project.shortTitle || project.title || "project").replace(/[^a-zA-Z0-9]+/g, "_");
+  if (maxChapter && maxChapter <= 3) {
+    return `${base}_Chapters_1_to_${maxChapter}_Proposal`;
+  }
+  return `${base}_Manuscript`;
 }
 
-export async function buildDocxBlob(project) {
+export async function buildDocxBlob(project, options = {}) {
+  const maxChapter = options.maxChapter || null;
   const docx = await import("docx");
   const {
     Document,
@@ -217,24 +240,28 @@ export async function buildDocxBlob(project) {
     }
   });
 
-  const cover = titlePageLines(project).map((entry) => centered(entry.text, entry));
+  const cover = titlePageLines(project, maxChapter).map((entry) => centered(entry.text, entry));
 
-  const captions = collectCaptions(project.chapters);
+  const filteredChapters = Object.fromEntries(
+    Object.entries(project.chapters || {}).filter(([num]) => (maxChapter ? Number(num) <= maxChapter : true))
+  );
+  const captions = collectCaptions(filteredChapters);
   const preliminary = [];
-  requiredPages(project).forEach((page, index) => {
+  requiredPages(project, maxChapter).forEach((page, index) => {
     const first = index === 0;
     if (page.key === "contents") {
       preliminary.push(pageTitle(page.label, first), new TableOfContents(page.label, { hyperlink: true, headingStyleRange: "1-2" }));
       return;
     }
     preliminary.push(pageTitle(page.label, first));
-    const paragraphs = pageBody(page, project, captions);
+    const paragraphs = pageBody(page, project, captions, maxChapter);
     const isList = page.key === "tables" || page.key === "figures";
     paragraphs.forEach((text) => preliminary.push(isList || page.key === "certification" ? plain(text) : body(text)));
   });
 
   const main = [];
-  orderedChapters(project).forEach((chapter, index) => {
+  orderedChapters(project, maxChapter).forEach((chapter, index) => {
+
     main.push(pageTitle(chapter.title || `Chapter ${index + 1}`, index === 0, HeadingLevel.HEADING_1));
 
     for (const block of parseBlocks(chapter.content)) {
@@ -367,17 +394,21 @@ export async function buildDocxBlob(project) {
 const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
-export function buildPrintableHtml(project) {
+export function buildPrintableHtml(project, options = {}) {
+  const maxChapter = options.maxChapter || null;
   const { font, sizePt, spacing } = getFormatting(project);
-  const captions = collectCaptions(project.chapters);
-  const chapters = orderedChapters(project);
+  const filteredChapters = Object.fromEntries(
+    Object.entries(project.chapters || {}).filter(([num]) => (maxChapter ? Number(num) <= maxChapter : true))
+  );
+  const captions = collectCaptions(filteredChapters);
+  const chapters = orderedChapters(project, maxChapter);
 
   const section = (title, inner) => `<section class="chapter"><h1>${escapeHtml(title)}</h1>${inner}</section>`;
-  const title = titlePageLines(project)
+  const title = titlePageLines(project, maxChapter)
     .map((entry) => `<p class="center${entry.bold ? " bold" : ""}">${escapeHtml(entry.text) || "&nbsp;"}</p>`)
     .join("");
 
-  const preliminary = requiredPages(project)
+  const preliminary = requiredPages(project, maxChapter)
     .map((page) => {
       if (page.key === "contents") {
         const entries = chapters.map((chapter) => `<p>${escapeHtml(chapter.title)}</p>`).join("");
@@ -388,7 +419,7 @@ export function buildPrintableHtml(project) {
         return section(page.label, entries + extra);
       }
       const css = page.kind === "standard" || page.key === "tables" || page.key === "figures" ? "plain" : "paragraph";
-      return section(page.label, pageBody(page, project, captions).map((text) => `<p class="${css}">${escapeHtml(text)}</p>`).join(""));
+      return section(page.label, pageBody(page, project, captions, maxChapter).map((text) => `<p class="${css}">${escapeHtml(text)}</p>`).join(""));
     })
     .join("");
 
@@ -429,7 +460,7 @@ export function buildPrintableHtml(project) {
     ? section("Appendices", parseBlocks(project.appendices).map((block) => (block.type === "heading" ? `<h2>${escapeHtml(block.text)}</h2>` : `<p class="${block.type}">${escapeHtml(block.text)}</p>`)).join(""))
     : "";
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(manuscriptFileName(project))}</title><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(manuscriptFileName(project, maxChapter))}</title><style>
 @page { size: A4; margin: 1in; }
 body { font-family: '${font.replace(/'/g, "")}', 'Times New Roman', serif; font-size: ${sizePt}pt; line-height: ${spacing}; color: #000; }
 .center { text-align: center; } .bold { font-weight: bold; }

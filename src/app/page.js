@@ -6,6 +6,7 @@ import { buildDocxBlob, buildPrintableHtml, manuscriptFileName, parseBlocks } fr
 import { formatReference } from "../lib/references";
 import { CHAPTER_STRUCTURES, buildChapters, exportWarnings, getSampleDedication, getSampleAcknowledgements, getSampleAbstract } from "../lib/nigerian-format";
 import { sanitizeOrConvertMermaid } from "../lib/diagram-utils";
+import { sanitizeAcademicDraft } from "../lib/clean-draft";
 
 const EMPTY_PROJECT = {
   id: "",
@@ -119,6 +120,9 @@ export default function Home() {
   const [customApiKey, setCustomApiKey] = useState("");
   const [customKeyError, setCustomKeyError] = useState("");
 
+  // Export Modal State (Chapters 1-3 Proposal vs Full Project)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
   // Table Builder State
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
   const [tableCaption, setTableCaption] = useState("Table 4.1: Demographic Characteristics of Respondents");
@@ -170,6 +174,14 @@ export default function Home() {
       const saved = localStorage.getItem("projectpilot_project");
       if (saved) {
         const parsed = JSON.parse(saved);
+        // Automatically sanitize any existing drafts in storage to eradicate **, ##, <br/>
+        if (parsed.chapters) {
+          Object.keys(parsed.chapters).forEach((k) => {
+            if (parsed.chapters[k]?.content) {
+              parsed.chapters[k].content = sanitizeAcademicDraft(parsed.chapters[k].content);
+            }
+          });
+        }
         setProject(parsed);
         setEditorText(parsed.chapters[currentChapter]?.content || "");
         setProjectContext(parsed.projectContext || null);
@@ -245,6 +257,25 @@ export default function Home() {
     else if (type === "bullet") insertTextAtCursor("\n- ", "\n");
     else if (type === "numbered") insertTextAtCursor("\n1. ", "\n");
     else if (type === "quote") insertTextAtCursor("\n> ", "\n");
+  };
+
+  const handleCleanDraftFormatting = () => {
+    const cleaned = sanitizeAcademicDraft(editorText);
+    setEditorText(cleaned);
+    const updatedChapters = {
+      ...project.chapters,
+      [currentChapter]: {
+        ...project.chapters[currentChapter],
+        content: cleaned
+      }
+    };
+    const updatedProject = { ...project, chapters: updatedChapters };
+    setProject(updatedProject);
+    try {
+      localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
+      setSaveStatus("Draft formatting cleaned and saved");
+    } catch {}
+    setAiFeedback("✨ Draft cleaned! Removed markdown signs (**, ##, <br/>) and standardized academic formatting.");
   };
 
   const openTableBuilderModal = () => {
@@ -531,7 +562,7 @@ export default function Home() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Chapter generation failed.");
       
-      let finalDraftContent = result.content;
+      let finalDraftContent = sanitizeAcademicDraft(result.content);
       const cleanDiagram = sanitizeOrConvertMermaid(result.diagram || "");
 
       // Auto-insert diagram directly into the draft if not already in the text
@@ -539,6 +570,7 @@ export default function Home() {
         const figureLabel = `Figure ${currentChapter}.1: System Flowchart and Conceptual Framework`;
         finalDraftContent = `${finalDraftContent.trim()}\n\n${figureLabel}\n\`\`\`mermaid\n${cleanDiagram}\n\`\`\`\n*${figureLabel}.*\n`;
       }
+      finalDraftContent = sanitizeAcademicDraft(finalDraftContent);
 
       const generatedWordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${finalDraftContent}`);
       if (generatedWordCount < 500) {
@@ -752,29 +784,41 @@ export default function Home() {
     }
   };
 
-  const checkExportReady = () => {
+  const checkExportReady = (maxChapter = null) => {
     if (!project.id) {
       setActiveView("dashboard");
       return false;
     }
-    const chaptersBelowMinimum = Object.entries(project.chapters)
-      .filter(([, chapter]) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) < 600)
+    const isProposal = Boolean(maxChapter && maxChapter <= 3);
+    const targetChapters = Object.entries(project.chapters)
+      .filter(([num]) => (maxChapter ? Number(num) <= maxChapter : true));
+
+    const chaptersBelowMinimum = targetChapters
+      .filter(([, chapter]) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) < 400)
       .map(([number]) => Number(number));
+
     if (chaptersBelowMinimum.length > 0) {
       setCurrentChapter(chaptersBelowMinimum[0]);
       setActiveView("studio");
-      setAiFeedback(
-        `Complete every chapter to at least 600 words before export. Chapters below the minimum: ${chaptersBelowMinimum.join(", ")}.`
-      );
+      if (isProposal) {
+        setAiFeedback(
+          `To export your Chapters 1 to ${maxChapter} Research Proposal, each of Chapters 1 to ${maxChapter} should have at least 400 words. Chapters below minimum: ${chaptersBelowMinimum.join(", ")}.`
+        );
+      } else {
+        setAiFeedback(
+          `Complete every chapter to at least 400 words before full export. Chapters below the minimum: ${chaptersBelowMinimum.join(", ")}.`
+        );
+      }
       return false;
     }
-    const unresolved = Object.values(project.chapters).reduce(
-      (count, chapter) => count + (chapter.content?.match(/\[(?:PROJECT DETAIL NEEDED|SOURCE NEEDED)[^\]]*\]/g)?.length || 0),
+
+    const unresolved = targetChapters.reduce(
+      (count, [, chapter]) => count + (chapter.content?.match(/\[(?:PROJECT DETAIL NEEDED|SOURCE NEEDED)[^\]]*\]/g)?.length || 0),
       0
     );
-    const warnings = exportWarnings(project);
+    const warnings = exportWarnings(project, maxChapter);
     if (unresolved > 0) {
-      warnings.push(`${unresolved} placeholder(s) such as [PROJECT DETAIL NEEDED] or [SOURCE NEEDED] are still in your text.`);
+      warnings.push(`${unresolved} placeholder(s) such as [PROJECT DETAIL NEEDED] or [SOURCE NEEDED] are still in Chapters 1 to ${maxChapter || 5}.`);
     }
     if (warnings.length > 0 && !window.confirm(`Before exporting:\n\n• ${warnings.join("\n• ")}\n\nExport anyway?`)) {
       return false;
@@ -782,37 +826,50 @@ export default function Home() {
     return true;
   };
 
-  const handleExportWord = async () => {
-    if (!checkExportReady()) return;
+  const handleExportWord = async (maxChapter = null) => {
+    if (!checkExportReady(maxChapter)) return;
+    const isProposal = Boolean(maxChapter && maxChapter <= 3);
 
     try {
-      const blob = await buildDocxBlob(project);
+      setAiFeedback(isProposal ? "Compiling Chapters 1–3 Research Proposal (.docx)..." : "Compiling Full Manuscript (.docx)...");
+      const blob = await buildDocxBlob(project, { maxChapter });
       const url = URL.createObjectURL(blob);
       const downloadLink = document.createElement("a");
       downloadLink.href = url;
-      downloadLink.download = `${manuscriptFileName(project)}.docx`;
+      downloadLink.download = `${manuscriptFileName(project, maxChapter)}.docx`;
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
       URL.revokeObjectURL(url);
+      setAiFeedback(
+        isProposal
+          ? "✅ Chapters 1 to 3 Research Proposal (.docx) downloaded successfully! Ready for supervisor review & defense."
+          : "✅ Full Manuscript (.docx) downloaded successfully!"
+      );
     } catch (error) {
       setAiFeedback(`Could not create the DOCX file: ${error.message}`);
     }
   };
 
-  const handleExportPdf = () => {
-    if (!checkExportReady()) return;
+  const handleExportPdf = (maxChapter = null) => {
+    if (!checkExportReady(maxChapter)) return;
+    const isProposal = Boolean(maxChapter && maxChapter <= 3);
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       setAiFeedback("Allow pop-ups for this page, then choose Export PDF again.");
       return;
     }
     printWindow.document.open();
-    printWindow.document.write(buildPrintableHtml(project));
+    printWindow.document.write(buildPrintableHtml(project, { maxChapter }));
     printWindow.document.close();
     printWindow.focus();
     printWindow.onload = () => printWindow.print();
     setTimeout(() => printWindow.print(), 500);
+    setAiFeedback(
+      isProposal
+        ? "📄 Chapters 1 to 3 Proposal ready! Print dialog opened (choose 'Save as PDF')."
+        : "📚 Full Manuscript ready! Print dialog opened (choose 'Save as PDF')."
+    );
   };
 
   // Create Project Flow
@@ -1397,7 +1454,8 @@ export default function Home() {
                     <li><button className="footer-link" onClick={() => setActiveView("studio")}>Chapter Studio</button></li>
                     <li><button className="footer-link" onClick={() => setActiveView("dashboard")}>Student Dashboard</button></li>
                     <li><button className="footer-link" onClick={() => setIsNewProjectModalOpen(true)}>Topic Generator</button></li>
-                    <li><button className="footer-link" onClick={handleExportWord}>Word .docx Export</button></li>
+                    <li><button className="footer-link" onClick={() => handleExportWord(3)}>Download Ch 1–3 Proposal</button></li>
+                    <li><button className="footer-link" onClick={() => handleExportWord()}>Full Word .docx Export</button></li>
                   </ul>
                 </div>
 
@@ -1460,8 +1518,25 @@ export default function Home() {
                 </p>
               </div>
 
-              <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-                <button className="btn btn-secondary btn-sm" onClick={handleExportWord}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleExportWord(3)}
+                  style={{
+                    border: "1px solid rgba(139, 92, 246, 0.6)",
+                    background: "rgba(139, 92, 246, 0.18)",
+                    color: "#f3e8ff",
+                    fontWeight: "600"
+                  }}
+                  title="Download Chapters 1 to 3 Proposal for departmental defense"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                  </svg>
+                  <span>Download Ch 1–3 Proposal (.docx)</span>
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => handleExportWord()} title="Download Full 5-Chapter Project">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="7 10 12 15 17 10"></polyline>
@@ -1469,8 +1544,8 @@ export default function Home() {
                   </svg>
                   <span>Export Full Project (.docx)</span>
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={handleExportPdf}>
-                  <span>Export PDF</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => setIsExportModalOpen(true)} title="Choose between Proposal (Ch 1-3) or Full Project (PDF / Word)">
+                  <span>Export Options...</span>
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={() => setActiveView("studio")}>
                   <span>Continue Writing →</span>
@@ -1676,11 +1751,36 @@ export default function Home() {
                     <button className="btn btn-primary btn-sm" onClick={() => setActiveView("studio")}>
                       Open Chapter Studio
                     </button>
-                    <button className="btn btn-secondary btn-sm" onClick={handleExportWord}>
-                      Download Word Manuscript (.docx)
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleExportWord(3)}
+                      style={{
+                        border: "1px solid rgba(139, 92, 246, 0.5)",
+                        background: "rgba(139, 92, 246, 0.14)",
+                        color: "#f3e8ff",
+                        fontWeight: "600",
+                        textAlign: "left",
+                        justifyContent: "flex-start"
+                      }}
+                      title="Download Chapters 1 to 3 Proposal for departmental defense"
+                    >
+                      📄 Download Ch 1–3 Proposal (.docx)
                     </button>
-                    <button className="btn btn-secondary btn-sm" onClick={handleExportPdf}>
-                      Export PDF
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleExportWord()}
+                      style={{ textAlign: "left", justifyContent: "flex-start" }}
+                      title="Download Full 5-Chapter Project Manuscript"
+                    >
+                      📚 Download Full Manuscript (.docx)
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setIsExportModalOpen(true)}
+                      style={{ textAlign: "left", justifyContent: "flex-start", border: "1px solid rgba(255, 255, 255, 0.1)" }}
+                      title="Choose Proposal or Full Project in Word or PDF"
+                    >
+                      🖨️ Export Options & PDF...
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
@@ -1801,6 +1901,56 @@ export default function Home() {
                 )}
               </div>
             </div>
+
+            {/* PROPOSAL DEFENSE STATUS & EXPORT CARD */}
+            <div
+              style={{
+                marginTop: "24px",
+                padding: "14px",
+                borderRadius: "var(--radius-sm)",
+                background: "linear-gradient(135deg, rgba(139, 92, 246, 0.16), rgba(99, 102, 241, 0.08))",
+                border: "1px solid rgba(139, 92, 246, 0.35)"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                <span style={{ fontSize: "1.05rem" }}>🎓</span>
+                <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#f3e8ff" }}>
+                  Chapters 1–3 Proposal
+                </span>
+              </div>
+              <p style={{ fontSize: "0.75rem", color: "var(--violet-200)", lineHeight: "1.4", margin: "0 0 10px 0" }}>
+                Universities require Chapters 1–3 approved for proposal defense before data gathering (Chapters 4 & 5).
+              </p>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleExportWord(3)}
+                  style={{
+                    flex: 1,
+                    fontSize: "0.76rem",
+                    padding: "6px 8px",
+                    background: "rgba(139, 92, 246, 0.25)",
+                    border: "1px solid rgba(139, 92, 246, 0.6)",
+                    color: "#ffffff"
+                  }}
+                  title="Download Chapters 1 to 3 Word Document"
+                >
+                  📄 Word (.docx)
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => handleExportPdf(3)}
+                  style={{
+                    fontSize: "0.76rem",
+                    padding: "6px 8px",
+                    border: "1px solid rgba(255, 255, 255, 0.15)"
+                  }}
+                  title="Export Proposal PDF"
+                >
+                  PDF
+                </button>
+              </div>
+            </div>
           </aside>
 
           {/* CENTER: EDITING CANVAS */}
@@ -1820,11 +1970,31 @@ export default function Home() {
                   <span style={{ color: "var(--text-muted)" }}>•</span>
                   <span style={{ color: "var(--violet-300)", fontWeight: "600" }}>Project: ~{estimatedTotalPages} / 70+ pgs</span>
                 </span>
-                <button className="btn btn-secondary btn-sm" onClick={handleExportWord}>
-                  Export DOCX
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleExportWord(3)}
+                  style={{
+                    border: "1px solid rgba(139, 92, 246, 0.6)",
+                    background: "rgba(139, 92, 246, 0.16)",
+                    color: "#f3e8ff",
+                    fontWeight: "600",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                  title="Download Chapters 1 to 3 Research Proposal for defense"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                  </svg>
+                  <span>Export Ch 1–3 (Proposal)</span>
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={handleExportPdf}>
-                  Export PDF
+                <button className="btn btn-secondary btn-sm" onClick={() => handleExportWord()} title="Export Full 5-Chapter Manuscript">
+                  Export Full DOCX
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setIsExportModalOpen(true)} title="More export options (PDF, Proposal vs Full)">
+                  Export Options...
                 </button>
                 <button
                   className="btn btn-primary btn-sm"
@@ -1895,6 +2065,14 @@ export default function Home() {
                 </button>
                 <button className="ribbon-btn" onClick={() => insertFormatting("quote")} title="Blockquote">
                   ❝ Quote
+                </button>
+                <button
+                  className="ribbon-btn"
+                  onClick={handleCleanDraftFormatting}
+                  title="Remove all markdown signs (**, ##, <br/>) and standardize academic formatting"
+                  style={{ color: "#38bdf8", border: "1px solid rgba(56, 189, 248, 0.3)", marginLeft: "4px" }}
+                >
+                  <span>✨</span> Clean Formatting
                 </button>
               </div>
             </div>
@@ -2894,6 +3072,190 @@ export default function Home() {
               <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveCustomKey}>
                 Save & Activate Key
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL 5: EXPORT ACADEMIC MANUSCRIPT (CH 1-3 vs FULL)
+         ======================================================== */}
+      {isExportModalOpen && (
+        <div className="modal-backdrop" onClick={() => setIsExportModalOpen(false)}>
+          <div
+            className="modal-card"
+            style={{
+              maxWidth: "760px",
+              padding: "28px",
+              background: "linear-gradient(135deg, rgba(26, 20, 50, 0.98), rgba(15, 12, 35, 0.98))",
+              border: "1px solid rgba(139, 92, 246, 0.4)",
+              boxShadow: "0 25px 60px rgba(0, 0, 0, 0.8)"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ marginBottom: "20px" }}>
+              <div>
+                <span className="badge badge-cyan" style={{ marginBottom: "6px" }}>Submission Export</span>
+                <h3 style={{ fontSize: "1.3rem", fontWeight: "700", color: "#ffffff", margin: 0 }}>
+                  Export Academic Manuscript
+                </h3>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: "4px 0 0" }}>
+                  Select the required academic submission stage for your institution
+                </p>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsExportModalOpen(false)} style={{ fontSize: "1.1rem", padding: "4px 10px" }}>
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))", gap: "18px", marginBottom: "20px" }}>
+              {/* STAGE 1: CHAPTERS 1-3 PROPOSAL */}
+              <div
+                style={{
+                  padding: "20px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "linear-gradient(135deg, rgba(139, 92, 246, 0.18), rgba(99, 102, 241, 0.08))",
+                  border: "1px solid rgba(139, 92, 246, 0.5)",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between"
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <span
+                      style={{
+                        fontSize: "0.72rem",
+                        fontWeight: "700",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        padding: "3px 8px",
+                        borderRadius: "4px",
+                        background: "rgba(139, 92, 246, 0.35)",
+                        color: "#f3e8ff"
+                      }}
+                    >
+                      Pre-Data Defense
+                    </span>
+                    <span style={{ fontSize: "0.82rem", color: "var(--violet-300)", fontWeight: "600" }}>
+                      Chapters 1 – 3
+                    </span>
+                  </div>
+                  <h4 style={{ fontSize: "1.1rem", fontWeight: "700", color: "#ffffff", marginBottom: "8px" }}>
+                    Research Proposal
+                  </h4>
+                  <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: "1.45", marginBottom: "12px" }}>
+                    Required by most universities for Departmental Proposal Defense & supervisor sign-off before gathering empirical data (Chapters 4 & 5).
+                  </p>
+                  <ul style={{ fontSize: "0.76rem", color: "var(--text-muted)", paddingLeft: "16px", lineHeight: "1.65", margin: "0 0 18px 0" }}>
+                    <li>Proposal Title Page & Certification</li>
+                    <li>TOC & List of Tables/Figures (Ch 1–3)</li>
+                    <li>Chapter 1: Introduction</li>
+                    <li>Chapter 2: Literature Review</li>
+                    <li>Chapter 3: Research Methodology</li>
+                    <li>Complete References list (APA 7th)</li>
+                    <li>Appendices (Questionnaires / Instruments)</li>
+                  </ul>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      setIsExportModalOpen(false);
+                      handleExportWord(3);
+                    }}
+                    style={{ width: "100%", justifyContent: "center" }}
+                  >
+                    📄 Download Proposal (.docx)
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setIsExportModalOpen(false);
+                      handleExportPdf(3);
+                    }}
+                    style={{ width: "100%", justifyContent: "center" }}
+                  >
+                    Export Proposal PDF
+                  </button>
+                </div>
+              </div>
+
+              {/* STAGE 2: FULL 5-CHAPTER PROJECT */}
+              <div
+                style={{
+                  padding: "20px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between"
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <span
+                      style={{
+                        fontSize: "0.72rem",
+                        fontWeight: "700",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        padding: "3px 8px",
+                        borderRadius: "4px",
+                        background: "rgba(255, 255, 255, 0.08)",
+                        color: "var(--text-secondary)"
+                      }}
+                    >
+                      Final Defense
+                    </span>
+                    <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)", fontWeight: "600" }}>
+                      Chapters 1 – 5
+                    </span>
+                  </div>
+                  <h4 style={{ fontSize: "1.1rem", fontWeight: "700", color: "#ffffff", marginBottom: "8px" }}>
+                    Full Project Manuscript
+                  </h4>
+                  <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: "1.45", marginBottom: "12px" }}>
+                    Complete bound manuscript for final external defense, departmental archiving, and graduation clearance.
+                  </p>
+                  <ul style={{ fontSize: "0.76rem", color: "var(--text-muted)", paddingLeft: "16px", lineHeight: "1.65", margin: "0 0 18px 0" }}>
+                    <li>Full Degree Title Page & Certification</li>
+                    <li>Declaration, Dedication, Acknowledgements</li>
+                    <li>Complete Abstract (150–300 words)</li>
+                    <li>Full Table of Contents (Chapters 1–5)</li>
+                    <li>Chapter 4: Results & Data Analysis</li>
+                    <li>Chapter 5: Discussion & Recommendations</li>
+                    <li>References & Appendices</li>
+                  </ul>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setIsExportModalOpen(false);
+                      handleExportWord();
+                    }}
+                    style={{ width: "100%", justifyContent: "center" }}
+                  >
+                    📚 Download Full Project (.docx)
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setIsExportModalOpen(false);
+                      handleExportPdf();
+                    }}
+                    style={{ width: "100%", justifyContent: "center" }}
+                  >
+                    Export Full PDF
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              All exports are formatted to Nigerian university specifications (A4, 1-inch margins, Times New Roman 12pt, 1.5 spacing, APA 7th).
             </div>
           </div>
         </div>
