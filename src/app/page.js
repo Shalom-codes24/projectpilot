@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { countChapterWords } from "../lib/word-count";
 import { buildDocxBlob, buildPrintableHtml, manuscriptFileName, parseBlocks } from "../lib/export-manuscript";
 import { formatReference } from "../lib/references";
 import { CHAPTER_STRUCTURES, buildChapters, exportWarnings, getSampleDedication, getSampleAcknowledgements, getSampleAbstract } from "../lib/nigerian-format";
+import { sanitizeOrConvertMermaid } from "../lib/diagram-utils";
 
 const EMPTY_PROJECT = {
   id: "",
@@ -34,15 +35,17 @@ function MermaidDiagram({ code, id }) {
   const containerRef = useRef(null);
   const [error, setError] = useState(null);
 
+  const cleanCode = useMemo(() => sanitizeOrConvertMermaid(code), [code]);
+
   useEffect(() => {
     let isMounted = true;
-    if (!code || !containerRef.current) return;
+    if (!cleanCode || !containerRef.current) return;
 
     import("mermaid")
       .then(({ default: mermaid }) => {
         mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "neutral" });
         const uniqueId = `mermaid-fig-${id || Math.random().toString(36).substring(7)}`;
-        return mermaid.render(uniqueId, code);
+        return mermaid.render(uniqueId, cleanCode);
       })
       .then((res) => {
         if (isMounted && containerRef.current) {
@@ -57,12 +60,18 @@ function MermaidDiagram({ code, id }) {
     return () => {
       isMounted = false;
     };
-  }, [code, id]);
+  }, [cleanCode, id]);
 
   if (error) {
     return (
-      <div style={{ color: "#ef4444", fontSize: "0.85rem", padding: "10px", background: "#fef2f2", borderRadius: "6px" }}>
-        Diagram rendering issue: {error}
+      <div className="academic-diagram-fallback" style={{ margin: "20px 0", padding: "16px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid rgba(139, 92, 246, 0.35)", borderRadius: "8px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", fontSize: "0.8rem", color: "var(--violet-300)" }}>
+          <span style={{ fontWeight: 600 }}>📊 Methodological / System Framework Diagram</span>
+          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Formatted Monospace View</span>
+        </div>
+        <pre style={{ margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: "0.82rem", color: "#38bdf8", lineHeight: "1.45", overflowX: "auto", whiteSpace: "pre-wrap" }}>
+          {code}
+        </pre>
       </div>
     );
   }
@@ -523,10 +532,12 @@ export default function Home() {
       if (!response.ok) throw new Error(result.error || "Chapter generation failed.");
       
       let finalDraftContent = result.content;
+      const cleanDiagram = sanitizeOrConvertMermaid(result.diagram || "");
+
       // Auto-insert diagram directly into the draft if not already in the text
-      if (result.diagram && !finalDraftContent.includes("```mermaid")) {
+      if (cleanDiagram && !finalDraftContent.includes("```mermaid")) {
         const figureLabel = `Figure ${currentChapter}.1: System Flowchart and Conceptual Framework`;
-        finalDraftContent = `${finalDraftContent.trim()}\n\n${figureLabel}\n\`\`\`mermaid\n${result.diagram.trim()}\n\`\`\`\n*${figureLabel}.*\n`;
+        finalDraftContent = `${finalDraftContent.trim()}\n\n${figureLabel}\n\`\`\`mermaid\n${cleanDiagram}\n\`\`\`\n*${figureLabel}.*\n`;
       }
 
       const generatedWordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${finalDraftContent}`);
@@ -535,7 +546,7 @@ export default function Home() {
       }
       setEditorText(finalDraftContent);
       setVisualPlan(result.visuals || []);
-      setDiagramCode(result.diagram || "");
+      setDiagramCode(cleanDiagram);
       const updatedProject = {
         ...project,
         chapters: {

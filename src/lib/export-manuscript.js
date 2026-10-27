@@ -1,4 +1,5 @@
 import { sortedReferences } from "./references";
+import { sanitizeOrConvertMermaid } from "./diagram-utils";
 import {
   DEFAULT_FORMATTING,
   awardName,
@@ -33,7 +34,7 @@ export function parseBlocks(content = "") {
       blocks.push({
         type: "diagram",
         caption: captionLine || "Figure Diagram",
-        code: mermaidMatch[1].trim()
+        code: sanitizeOrConvertMermaid(mermaidMatch[1].trim())
       });
       continue;
     }

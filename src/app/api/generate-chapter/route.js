@@ -1,5 +1,6 @@
 import { countChapterWords } from "../../../lib/word-count";
 import { GEMINI_TEXT_MODEL, executeWithKeyRotation } from "../../../lib/gemini";
+import { sanitizeOrConvertMermaid } from "../../../lib/diagram-utils";
 
 function cleanAndParseJson(text) {
   if (typeof text !== "string") return null;
@@ -160,9 +161,12 @@ STUDENT PROXY & RAW DATA SELF-GENERATION (MANDATORY):
    - Elaborate on nuances, comparative scholarly perspectives, Nigerian/African and global contexts, practical implications, and operational impact.
    - Avoid generic filler or repetitive sentences. Deliver dense, high-value academic knowledge.
 
-5. ACADEMIC TABLES & DIAGRAM:
+5. ACADEMIC TABLES & MERMAID DIAGRAM:
    - Integrate structured Markdown tables (| Column | Column | ...) where appropriate to present data distributions, comparative reviews, variable classifications, or technical specifications.
-   - Include a comprehensive Mermaid diagram (flowchart TD, sequenceDiagram, classDiagram, or erDiagram) illustrating the core framework, architecture, or workflow of this chapter in the "diagram" property.
+   - For the "diagram" property and any markdown code blocks, you MUST ALWAYS provide valid Mermaid syntax starting with "flowchart TD" or "graph TD" or "sequenceDiagram".
+   - CRITICAL: NEVER output ASCII text boxes with "+---+" or "|---|". Every node in Mermaid must use valid node definitions, e.g.:
+     flowchart TD
+       step1["Step 1 Title<br/>Detailed description"] --> step2["Step 2 Title<br/>Detailed description"]
 
 6. HEADING STRUCTURE & CITATIONS:
    - Use the subsection headings listed in chapter.sections (e.g., 4.1 Data Presentation, 4.2 Analysis of Research Questions, 4.3 Testing of Hypotheses, 4.4 Discussion of Findings).
@@ -252,11 +256,19 @@ STUDENT PROXY & RAW DATA SELF-GENERATION (MANDATORY):
     }
 
     let finalContent = chapterResult.content;
+
+    // Auto-convert any ASCII diagram blocks inside finalContent to valid Mermaid
+    finalContent = finalContent.replace(
+      /```(?:mermaid)?\s*([\s\S]*?)```/gi,
+      (match, innerCode) => {
+        const converted = sanitizeOrConvertMermaid(innerCode);
+        return `\`\`\`mermaid\n${converted}\n\`\`\``;
+      }
+    );
+
     const validDiagram =
-      typeof chapterResult.diagram === "string" &&
-      chapterResult.diagram.length <= 5000 &&
-      /^\s*(?:flowchart|graph|erDiagram|sequenceDiagram|classDiagram|stateDiagram)\b/m.test(chapterResult.diagram)
-        ? chapterResult.diagram.trim()
+      typeof chapterResult.diagram === "string" && chapterResult.diagram.trim()
+        ? sanitizeOrConvertMermaid(chapterResult.diagram)
         : "";
 
     // Auto-insert diagram directly into the most relevant section if not already present
