@@ -5,7 +5,7 @@ import { countChapterWords } from "../lib/word-count";
 import { buildDocxBlob, buildPrintableHtml, manuscriptFileName, parseBlocks } from "../lib/export-manuscript";
 import { formatReference } from "../lib/references";
 import { CHAPTER_STRUCTURES, buildChapters, exportWarnings, getSampleDedication, getSampleAcknowledgements, getSampleAbstract } from "../lib/nigerian-format";
-import { sanitizeOrConvertMermaid } from "../lib/diagram-utils";
+import { sanitizeOrConvertMermaid, getDefaultChapterFlowchart, extractDiagramFromContent } from "../lib/diagram-utils";
 import { sanitizeAcademicDraft } from "../lib/clean-draft";
 
 const EMPTY_PROJECT = {
@@ -40,12 +40,19 @@ function MermaidDiagram({ code, id }) {
 
   useEffect(() => {
     let isMounted = true;
-    if (!cleanCode || !containerRef.current) return;
+    if (!containerRef.current) return;
+
+    if (!cleanCode) {
+      containerRef.current.innerHTML = "";
+      setError(null);
+      return;
+    }
 
     import("mermaid")
       .then(({ default: mermaid }) => {
         mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "neutral" });
-        const uniqueId = `mermaid-fig-${id || Math.random().toString(36).substring(7)}`;
+        const safeId = (id || Math.random().toString(36).substring(7)).replace(/[^a-zA-Z0-9_-]/g, "_");
+        const uniqueId = `mermaid_fig_${safeId}_${Math.floor(Math.random() * 100000)}`;
         return mermaid.render(uniqueId, cleanCode);
       })
       .then((res) => {
@@ -65,13 +72,13 @@ function MermaidDiagram({ code, id }) {
 
   if (error) {
     return (
-      <div className="academic-diagram-fallback" style={{ margin: "20px 0", padding: "16px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid rgba(139, 92, 246, 0.35)", borderRadius: "8px" }}>
+      <div className="academic-diagram-fallback" style={{ margin: "16px 0", padding: "16px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid rgba(139, 92, 246, 0.35)", borderRadius: "8px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", fontSize: "0.8rem", color: "var(--violet-300)" }}>
           <span style={{ fontWeight: 600 }}>📊 Methodological / System Framework Diagram</span>
-          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Formatted Monospace View</span>
+          <span style={{ fontSize: "0.72rem", color: "#f87171" }}>Syntax note: Monospace fallback rendered</span>
         </div>
         <pre style={{ margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: "0.82rem", color: "#38bdf8", lineHeight: "1.45", overflowX: "auto", whiteSpace: "pre-wrap" }}>
-          {code}
+          {cleanCode || code}
         </pre>
       </div>
     );
@@ -98,6 +105,7 @@ export default function Home() {
   const [allowAiProcessing, setAllowAiProcessing] = useState(false);
   const [visualPlan, setVisualPlan] = useState([]);
   const [diagramCode, setDiagramCode] = useState("");
+  const [isFlowchartCardVisible, setIsFlowchartCardVisible] = useState(true);
   const [refinementRequest, setRefinementRequest] = useState("");
   const [generatedImages, setGeneratedImages] = useState({});
   const [imageLoadingIndex, setImageLoadingIndex] = useState(null);
@@ -330,8 +338,9 @@ export default function Home() {
     setIsTableModalOpen(false);
   };
 
-  const openDiagramStudioModal = () => {
-    setDiagramModalCaption(`Figure ${currentChapter}.1: System Architecture Diagram`);
+  const openDiagramStudioModal = (initialCode, initialCaption) => {
+    setDiagramModalCaption(initialCaption || `Figure ${currentChapter}.1: Methodological Framework & Flowchart`);
+    setDiagramModalCode(initialCode || diagramCode || getDefaultChapterFlowchart(currentChapter, project));
     setIsDiagramModalOpen(true);
   };
 
@@ -376,9 +385,60 @@ export default function Home() {
   };
 
   const handleInsertDiagramIntoEditor = () => {
-    const formattedDiagram = `\n\n${diagramModalCaption.trim()}\n\`\`\`mermaid\n${diagramModalCode.trim()}\n\`\`\`\n\n`;
-    insertTextAtCursor(formattedDiagram);
+    const cleanCode = sanitizeOrConvertMermaid(diagramModalCode.trim());
+    const figureCaption = diagramModalCaption.trim();
+    const formattedDiagram = `\n\n${figureCaption}\n\`\`\`mermaid\n${cleanCode}\n\`\`\`\n*${figureCaption}.*\n\n`;
+
+    let updatedText = editorText;
+    if (updatedText.includes("```mermaid")) {
+      updatedText = updatedText.replace(/(?:(?:figure\s+\d+[^\n]*\n)?)```(?:mermaid)?\s*[\s\S]*?```(?:\s*\*figure\s+\d+[^\n]*\*)?/i, formattedDiagram.trim());
+    } else {
+      updatedText = updatedText + formattedDiagram;
+    }
+
+    setEditorText(updatedText);
+    setDiagramCode(cleanCode);
+    handleEditorChange({ target: { value: updatedText } });
     setIsDiagramModalOpen(false);
+  };
+
+  const handleRegenerateChapterFlowchart = () => {
+    const standardFlowchart = getDefaultChapterFlowchart(currentChapter, project);
+    const chapterTitle = project.chapters[currentChapter]?.title?.replace(/^Chapter (?:One|Two|Three|Four|Five|\d+):?\s*/i, "") || "Conceptual Framework";
+    const figureCaption = `Figure ${currentChapter}.1: ${chapterTitle} - Process Flowchart`;
+    const formattedDiagram = `\n\n${figureCaption}\n\`\`\`mermaid\n${standardFlowchart}\n\`\`\`\n*${figureCaption}.*\n\n`;
+
+    let updatedText = editorText;
+    if (updatedText.includes("```mermaid")) {
+      updatedText = updatedText.replace(/(?:(?:figure\s+\d+[^\n]*\n)?)```(?:mermaid)?\s*[\s\S]*?```(?:\s*\*figure\s+\d+[^\n]*\*)?/i, formattedDiagram.trim());
+    } else {
+      const lines = updatedText.split("\n");
+      const insertIdx = Math.min(lines.length, Math.max(2, Math.floor(lines.length * 0.6)));
+      lines.splice(insertIdx, 0, formattedDiagram);
+      updatedText = lines.join("\n");
+    }
+
+    setEditorText(updatedText);
+    setDiagramCode(standardFlowchart);
+    handleEditorChange({ target: { value: updatedText } });
+  };
+
+  const handleDownloadDiagramSvg = () => {
+    const svgEl = document.querySelector(".studio-flowchart-card svg, .mermaid-render-target svg, .diagram-preview svg");
+    if (!svgEl) {
+      alert("Flowchart SVG is not rendered yet.");
+      return;
+    }
+    const svgData = new XMLSerializer().serializeToString(svgEl);
+    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const downloadLink = document.createElement("a");
+    downloadLink.href = svgUrl;
+    downloadLink.download = `Chapter_${currentChapter}_Flowchart.svg`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(svgUrl);
   };
 
   const handleSaveCustomKey = () => {
@@ -415,24 +475,36 @@ export default function Home() {
     } catch {}
   };
 
-  // Update editor text when current chapter changes
-  useEffect(() => {
-    if (project.chapters[currentChapter]) {
-      setEditorText(project.chapters[currentChapter].content);
-    }
-  }, [currentChapter, project]);
-
+  // Update editor text and extract diagram when current chapter changes
   useEffect(() => {
     setVisualPlan([]);
-    setDiagramCode("");
     setGeneratedImages({});
+    const chContent = project.chapters[currentChapter]?.content || "";
+    setEditorText(chContent);
+
+    // Extract diagram from active chapter content, or fallback to tailored template
+    const extracted = extractDiagramFromContent(chContent);
+    if (extracted && extracted.code) {
+      setDiagramCode(extracted.code);
+    } else {
+      const template = getDefaultChapterFlowchart(currentChapter, project);
+      setDiagramCode(template);
+    }
   }, [currentChapter]);
+
+  // When editorText changes, keep diagramCode synced if a diagram block exists
+  useEffect(() => {
+    const extracted = extractDiagramFromContent(editorText);
+    if (extracted && extracted.code) {
+      setDiagramCode(extracted.code);
+    }
+  }, [editorText]);
 
   useEffect(() => {
     if (!diagramCode || !diagramPreviewRef.current) return;
     let isMounted = true;
     import("mermaid").then(({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "dark" });
+      mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "neutral" });
       return mermaid.render(`project-diagram-${Date.now()}`, diagramCode);
     }).then((result) => {
       if (isMounted && diagramPreviewRef.current) diagramPreviewRef.current.innerHTML = result.svg;
@@ -563,11 +635,17 @@ export default function Home() {
       if (!response.ok) throw new Error(result.error || "Chapter generation failed.");
       
       let finalDraftContent = sanitizeAcademicDraft(result.content);
-      const cleanDiagram = sanitizeOrConvertMermaid(result.diagram || "");
+      let cleanDiagram = sanitizeOrConvertMermaid(result.diagram || "");
+
+      if (!cleanDiagram || cleanDiagram.length < 20) {
+        cleanDiagram = getDefaultChapterFlowchart(currentChapter, project);
+      }
 
       // Auto-insert diagram directly into the draft if not already in the text
-      if (cleanDiagram && !finalDraftContent.includes("```mermaid")) {
-        const figureLabel = `Figure ${currentChapter}.1: System Flowchart and Conceptual Framework`;
+      if (!finalDraftContent.includes("```mermaid")) {
+        const chapterNum = currentChapter;
+        const chapterTitle = project.chapters[currentChapter]?.title?.replace(/^Chapter (?:One|Two|Three|Four|Five|\d+):?\s*/i, "") || "Conceptual Framework";
+        const figureLabel = `Figure ${chapterNum}.1: ${chapterTitle} - Process Flowchart`;
         finalDraftContent = `${finalDraftContent.trim()}\n\n${figureLabel}\n\`\`\`mermaid\n${cleanDiagram}\n\`\`\`\n*${figureLabel}.*\n`;
       }
       finalDraftContent = sanitizeAcademicDraft(finalDraftContent);
@@ -2100,6 +2178,91 @@ export default function Home() {
                     }}
                   />
 
+                  {/* PROMINENT VISUAL FLOWCHART CARD IN DRAFT EDITOR */}
+                  {diagramCode ? (
+                    <div className="studio-flowchart-card">
+                      <div className="studio-flowchart-header">
+                        <div className="studio-flowchart-title">
+                          <span style={{ fontSize: "1.2rem" }}>📊</span>
+                          <div>
+                            <h4>Figure {currentChapter}.1: Methodological & Conceptual Framework Flowchart</h4>
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                              Live visual rendering • Embedded in Chapter {currentChapter} manuscript
+                            </span>
+                          </div>
+                          <span className="studio-flowchart-badge">Active Visual</span>
+                        </div>
+                        <div className="studio-flowchart-actions">
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => openDiagramStudioModal(diagramCode, `Figure ${currentChapter}.1: Methodological Framework`)}
+                            title="Edit flowchart nodes, text, and structure in Diagram Studio"
+                          >
+                            ✏️ Edit Diagram
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={handleRegenerateChapterFlowchart}
+                            title="Regenerate or reset to standard university chapter framework"
+                          >
+                            🔄 Reset
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={handleDownloadDiagramSvg}
+                            title="Download high-resolution SVG of this flowchart"
+                          >
+                            💾 Download SVG
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setIsFlowchartCardVisible(!isFlowchartCardVisible)}
+                            title={isFlowchartCardVisible ? "Collapse diagram preview" : "Expand diagram preview"}
+                          >
+                            {isFlowchartCardVisible ? "▲ Collapse" : "▼ Expand"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isFlowchartCardVisible && (
+                        <>
+                          <div className="studio-flowchart-body">
+                            <MermaidDiagram code={diagramCode} id={`active-ch${currentChapter}`} />
+                          </div>
+                          <div className="studio-flowchart-caption">
+                            *Figure {currentChapter}.1: Methodological Framework, Variable Interaction & System Architecture.*
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="studio-flowchart-empty-card">
+                      <div className="studio-flowchart-empty-info">
+                        <span className="studio-flowchart-empty-icon">📊</span>
+                        <div>
+                          <strong style={{ color: "#ffffff", fontSize: "0.95rem" }}>
+                            No Flowchart Embedded in Chapter {currentChapter}
+                          </strong>
+                          <p style={{ margin: "2px 0 0", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                            Academic dissertations require a visual framework (Conceptual, Design, or Data Flow).
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={handleRegenerateChapterFlowchart}
+                        style={{ whiteSpace: "nowrap" }}
+                      >
+                        + Generate Chapter {currentChapter} Flowchart
+                      </button>
+                    </div>
+                  )}
+
                   <textarea
                     ref={editorTextareaRef}
                     className="editor-textarea"
@@ -2566,15 +2729,28 @@ export default function Home() {
                   </div>
                 ))}
                 {diagramCode && (
-                  <details className="diagram-details">
-                    <summary>View project diagram source</summary>
-                    <div className="diagram-preview" ref={diagramPreviewRef} />
-                    <button className="btn btn-secondary btn-sm" onClick={downloadDiagram}>
-                      Download diagram (SVG)
-                    </button>
-                    <pre>{diagramCode}</pre>
-                    <p>Mermaid diagram source; verify the flow and labels against your project before use.</p>
-                  </details>
+                  <div style={{ marginTop: "14px", padding: "14px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid rgba(139, 92, 246, 0.3)", borderRadius: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <strong style={{ fontSize: "0.88rem", color: "#ffffff" }}>📊 Chapter Flowchart</strong>
+                      <span style={{ fontSize: "0.7rem", padding: "2px 6px", borderRadius: "4px", background: "rgba(56, 189, 248, 0.2)", color: "#38bdf8", fontWeight: 600 }}>
+                        Live SVG
+                      </span>
+                    </div>
+                    <div style={{ background: "#ffffff", borderRadius: "6px", padding: "10px", maxHeight: "220px", overflow: "auto", display: "flex", justifyContent: "center", marginBottom: "10px" }}>
+                      <MermaidDiagram code={diagramCode} id={`sidebar-ch${currentChapter}`} />
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      <button className="btn btn-secondary btn-sm" onClick={handleDownloadDiagramSvg} style={{ flex: 1, fontSize: "0.78rem" }}>
+                        💾 SVG
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openDiagramStudioModal(diagramCode, `Figure ${currentChapter}.1: Methodological Framework`)} style={{ flex: 1, fontSize: "0.78rem" }}>
+                        ✏️ Edit
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={handleRegenerateChapterFlowchart} title="Reset to standard template" style={{ fontSize: "0.78rem" }}>
+                        🔄
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}

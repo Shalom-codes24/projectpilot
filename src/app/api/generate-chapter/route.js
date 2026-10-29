@@ -1,6 +1,6 @@
 import { countChapterWords } from "../../../lib/word-count";
 import { GEMINI_TEXT_MODEL, executeWithKeyRotation } from "../../../lib/gemini";
-import { sanitizeOrConvertMermaid } from "../../../lib/diagram-utils";
+import { sanitizeOrConvertMermaid, getDefaultChapterFlowchart } from "../../../lib/diagram-utils";
 import { sanitizeAcademicDraft } from "../../../lib/clean-draft";
 
 function cleanAndParseJson(text) {
@@ -273,15 +273,21 @@ STUDENT PROXY & RAW DATA SELF-GENERATION (MANDATORY):
       }
     );
 
-    const validDiagram =
+    let validDiagram =
       typeof chapterResult.diagram === "string" && chapterResult.diagram.trim()
         ? sanitizeOrConvertMermaid(chapterResult.diagram)
         : "";
 
+    // Guarantee that every chapter receives a valid, tailored academic flowchart
+    if (!validDiagram || validDiagram.length < 20) {
+      validDiagram = getDefaultChapterFlowchart(chapter?.number || 1, project);
+    }
+
     // Auto-insert diagram directly into the most relevant section if not already present
-    if (validDiagram && !finalContent.includes("```mermaid")) {
+    if (!finalContent.includes("```mermaid")) {
       const chapterNum = chapter?.number || 1;
-      const figureLabel = `Figure ${chapterNum}.1: System Flowchart and Conceptual Framework`;
+      const chapterTitle = chapter?.title?.replace(/^Chapter (?:One|Two|Three|Four|Five|\d+):?\s*/i, "") || "Conceptual Framework";
+      const figureLabel = `Figure ${chapterNum}.1: ${chapterTitle} - Process Flowchart`;
       const diagramMarkdown = `\n\n${figureLabel}\n\`\`\`mermaid\n${validDiagram}\n\`\`\`\n*${figureLabel}.*\n\n`;
 
       const lines = finalContent.split("\n");

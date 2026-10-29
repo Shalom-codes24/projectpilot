@@ -30,12 +30,19 @@ export function parseBlocks(content = "") {
     const blockText = lines.join("\n");
 
     // 1. Mermaid diagram block
-    const mermaidMatch = blockText.match(/(?:(?:figure\s+\d+[^\n]*\n)?)```(?:mermaid)?\s*([\s\S]*?)```/i);
+    const mermaidMatch = blockText.match(/```(?:mermaid)?\s*([\s\S]*?)```/i);
     if (mermaidMatch) {
-      const captionLine = lines.find((l) => /^figure\s+\d+/i.test(l));
+      let caption = lines.find((l) => /^figure\s+\d+/i.test(l));
+      if (!caption && blocks.length > 0) {
+        const lastBlock = blocks[blocks.length - 1];
+        if (lastBlock && /^figure\s+\d+/i.test(lastBlock.text || "")) {
+          caption = lastBlock.text;
+          blocks.pop(); // Connect the standalone caption block to this diagram
+        }
+      }
       blocks.push({
         type: "diagram",
-        caption: captionLine || "Figure Diagram",
+        caption: caption || "Figure Diagram",
         code: sanitizeOrConvertMermaid(mermaidMatch[1].trim())
       });
       continue;
