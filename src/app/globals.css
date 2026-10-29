@@ -97,12 +97,14 @@ body {
 .text-gradient {
   background: linear-gradient(135deg, #ffffff 15%, var(--violet-300) 55%, var(--violet-500) 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .text-gradient-alt {
   background: linear-gradient(135deg, var(--cyan-400) 0%, var(--violet-400) 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
