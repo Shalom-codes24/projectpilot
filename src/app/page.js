@@ -7,6 +7,7 @@ import { formatReference } from "../lib/references";
 import { CHAPTER_STRUCTURES, buildChapters, exportWarnings, getSampleDedication, getSampleAcknowledgements, getSampleAbstract } from "../lib/nigerian-format";
 import { sanitizeOrConvertMermaid, getDefaultChapterFlowchart, extractDiagramFromContent } from "../lib/diagram-utils";
 import { sanitizeAcademicDraft } from "../lib/clean-draft";
+import { getAccountSession, registerAccount, signInAccount, signOutAccount } from "./actions/auth";
 
 const EMPTY_PROJECT = {
   id: "",
@@ -91,6 +92,13 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState("landing"); // 'landing' | 'dashboard' | 'studio'
   const [project, setProject] = useState(EMPTY_PROJECT);
+  const [accountUser, setAccountUser] = useState(null);
+  const [accountReady, setAccountReady] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [accountMode, setAccountMode] = useState("sign-in");
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const [accountNotice, setAccountNotice] = useState("");
   const [currentChapter, setCurrentChapter] = useState(1);
   const [editorText, setEditorText] = useState("");
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
@@ -162,6 +170,150 @@ export default function Home() {
   const [newSupervisor, setNewSupervisor] = useState("");
   const [newTargetDate, setNewTargetDate] = useState("");
 
+  const applyLoadedProject = (loadedProject) => {
+    if (loadedProject?.chapters) {
+      Object.keys(loadedProject.chapters).forEach((chapterNumber) => {
+        const content = loadedProject.chapters[chapterNumber]?.content;
+        if (content) loadedProject.chapters[chapterNumber].content = sanitizeAcademicDraft(content);
+      });
+    }
+
+    setProject(loadedProject || EMPTY_PROJECT);
+    setEditorText(loadedProject?.chapters?.[currentChapter]?.content || "");
+    setProjectContext(loadedProject?.projectContext || null);
+  };
+
+  const loadAccountProject = async () => {
+    const accountResult = await getAccountSession();
+    if (accountResult.error) throw new Error(accountResult.error);
+    const user = accountResult.user;
+    if (!user) {
+      setAccountUser(null);
+      setAccountReady(false);
+      return null;
+    }
+
+    setAccountUser(user);
+    const projectResponse = await fetch("/api/projects");
+    const projectResult = await projectResponse.json();
+    if (!projectResponse.ok) {
+      applyLoadedProject(EMPTY_PROJECT);
+      throw new Error(projectResult.error || "Could not load your saved project.");
+    }
+
+    let savedProject = projectResult.project;
+    if (!savedProject) {
+      const localProject = localStorage.getItem("projectpilot_project");
+      if (localProject) {
+        const parsedLocalProject = JSON.parse(localProject);
+        if (parsedLocalProject?.id) {
+          const saveResponse = await fetch("/api/projects", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project: parsedLocalProject })
+          });
+          const saveResult = await saveResponse.json();
+          if (!saveResponse.ok) {
+            throw new Error(saveResult.error || "Could not move your browser project to your account.");
+          }
+          savedProject = parsedLocalProject;
+        }
+      }
+    }
+
+    if (savedProject) applyLoadedProject(savedProject);
+    localStorage.removeItem("projectpilot_project");
+    setAccountReady(true);
+    return user;
+  };
+
+  const handleAccountSubmit = async (event) => {
+    event.preventDefault();
+    setAccountError("");
+    setAccountNotice("");
+    setAccountBusy(true);
+
+    try {
+      const formData = new FormData(event.currentTarget);
+      const result = accountMode === "sign-up"
+        ? await registerAccount(formData)
+        : await signInAccount(formData);
+
+      if (result.error) {
+        setAccountError(result.error);
+        return;
+      }
+
+      if (accountMode === "sign-up") {
+        setAccountMode("sign-in");
+        const user = await loadAccountProject();
+        if (user) {
+          setIsAccountModalOpen(false);
+          setActiveView("dashboard");
+        } else {
+          setAccountNotice("Account created. Sign in to sync your project progress.");
+        }
+      } else {
+        const user = await loadAccountProject();
+        if (user) {
+          setIsAccountModalOpen(false);
+          setAccountNotice("");
+          setActiveView("dashboard");
+        } else {
+          setAccountError("Your account is not signed in yet. Please try again.");
+        }
+      }
+    } catch (error) {
+      setAccountError(error.message || "Account request failed. Please try again.");
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const handleAccountSignOut = async () => {
+    setAccountBusy(true);
+    setAccountError("");
+    try {
+      let localProject = null;
+      if (accountReady && project.id) {
+        const saveResponse = await fetch("/api/projects", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project })
+        });
+        const saveResult = await saveResponse.json();
+        if (!saveResponse.ok) throw new Error(saveResult.error || "Could not save your latest project changes.");
+      }
+      if (!accountReady) {
+        try {
+          const savedLocally = localStorage.getItem("projectpilot_project");
+          if (savedLocally) localProject = JSON.parse(savedLocally);
+        } catch (error) {
+          console.error("Could not restore the browser-saved project after sign out:", error);
+        }
+      }
+
+      const result = await signOutAccount();
+      if (result.error) {
+        setAccountError(result.error);
+        setIsAccountModalOpen(true);
+        return;
+      }
+
+      if (accountReady) localStorage.removeItem("projectpilot_project");
+      setAccountUser(null);
+      setAccountReady(false);
+      applyLoadedProject(localProject || EMPTY_PROJECT);
+      setActiveView("landing");
+      setSaveStatus("Signed out");
+    } catch (error) {
+      setAccountError(error.message || "Could not sign out.");
+      setIsAccountModalOpen(true);
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
   // Load from localStorage on mount
   useEffect(() => {
     setMounted(true);
@@ -178,28 +330,62 @@ export default function Home() {
       if (storedKey) setCustomApiKey(storedKey);
     } catch {}
 
+    let localProject = null;
     try {
       const saved = localStorage.getItem("projectpilot_project");
       if (saved) {
-        const parsed = JSON.parse(saved);
-        // Automatically sanitize any existing drafts in storage to eradicate **, ##, <br/>
-        if (parsed.chapters) {
-          Object.keys(parsed.chapters).forEach((k) => {
-            if (parsed.chapters[k]?.content) {
-              parsed.chapters[k].content = sanitizeAcademicDraft(parsed.chapters[k].content);
-            }
-          });
-        }
-        setProject(parsed);
-        setEditorText(parsed.chapters[currentChapter]?.content || "");
-        setProjectContext(parsed.projectContext || null);
+        localProject = JSON.parse(saved);
+        applyLoadedProject(localProject);
       } else {
         setEditorText("");
       }
-    } catch {
+    } catch (error) {
+      console.error("Could not load the browser-saved project:", error);
       setEditorText("");
     }
+
+    loadAccountProject().catch((error) => {
+      setSaveStatus(error.message || "Could not connect to your account.");
+    });
   }, []);
+
+  useEffect(() => {
+    if (!mounted || !project.id) return;
+
+    if (!accountUser) {
+      try {
+        localStorage.setItem("projectpilot_project", JSON.stringify(project));
+        setSaveStatus("Saved on this device");
+      } catch {
+        setSaveStatus("Could not save this project on this device");
+      }
+      return;
+    }
+
+    if (!accountReady) return;
+
+    let cancelled = false;
+    const timeout = setTimeout(async () => {
+      setSaveStatus("Saving to your account...");
+      try {
+        const response = await fetch("/api/projects", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not save your project.");
+        if (!cancelled) setSaveStatus("Saved to your account");
+      } catch (error) {
+        if (!cancelled) setSaveStatus(`Cloud save failed: ${error.message || "Please retry."}`);
+      }
+    }, 700);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [accountReady, accountUser, mounted, project]);
 
   // Timer for live generation progress feedback
   useEffect(() => {
@@ -279,10 +465,6 @@ export default function Home() {
     };
     const updatedProject = { ...project, chapters: updatedChapters };
     setProject(updatedProject);
-    try {
-      localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
-      setSaveStatus("Draft formatting cleaned and saved");
-    } catch {}
     setAiFeedback("✨ Draft cleaned! Removed markdown signs (**, ##, <br/>) and standardized academic formatting.");
   };
 
@@ -531,14 +713,6 @@ export default function Home() {
     };
     const updatedProject = { ...project, chapters: updatedChapters };
     setProject(updatedProject);
-
-    // Save to localStorage
-    try {
-      localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
-      setTimeout(() => setSaveStatus("Saved to local browser storage"), 600);
-    } catch {
-      setSaveStatus("Local save error");
-    }
   };
 
   const downloadDiagram = () => {
@@ -670,12 +844,6 @@ export default function Home() {
       };
 
       setProject(updatedProject);
-      try {
-        localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
-        setSaveStatus("Draft saved to local browser storage");
-      } catch {
-        setSaveStatus("Browser storage is full; this draft is not saved locally");
-      }
       const generatedPages = Math.max(1, Math.round(generatedWordCount / 280));
       const newTotalWords = Object.entries(updatedProject.chapters).reduce((acc, [cNum, ch]) => {
         return acc + countChapterWords(`${ch.title || ""}\n${ch.content || ""}`);
@@ -694,12 +862,6 @@ export default function Home() {
 
   const persistProject = (updatedProject) => {
     setProject(updatedProject);
-    try {
-      localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
-      setSaveStatus("Saved to local browser storage");
-    } catch {
-      setSaveStatus("Browser storage is full; changes are not saved locally");
-    }
   };
 
   const buildOutlineFromGuideline = async () => {
@@ -1005,26 +1167,6 @@ export default function Home() {
         chapters: buildChapters(newStructure)
       };
 
-      try {
-        localStorage.setItem("projectpilot_project", JSON.stringify(newPrj));
-      } catch {
-        try {
-          const compactPrj = {
-            ...newPrj,
-            projectContext: {
-              ...projectContext,
-              sources: projectContext.sources.map((s) => ({
-                name: s.name,
-                content: s.content.slice(0, 30000)
-              }))
-            }
-          };
-          localStorage.setItem("projectpilot_project", JSON.stringify(compactPrj));
-        } catch {
-          console.warn("Storage quota reached; keeping active project in memory.");
-        }
-      }
-
       setProject(newPrj);
       setProjectContext(projectContext);
       setEditorText("");
@@ -1126,9 +1268,28 @@ export default function Home() {
                 Auto-Failover
               </span>
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setActiveView("dashboard")}>
-              Sign In
-            </button>
+            {accountUser ? (
+              <>
+                <span className="nav-link" aria-label="Signed-in account">
+                  {accountUser.name || accountUser.email}
+                </span>
+                <button className="btn btn-ghost btn-sm" onClick={handleAccountSignOut} disabled={accountBusy}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setAccountMode("sign-in");
+                  setAccountError("");
+                  setAccountNotice("");
+                  setIsAccountModalOpen(true);
+                }}
+              >
+                Sign in
+              </button>
+            )}
             <button
               className="btn btn-primary btn-sm"
               onClick={() => setIsNewProjectModalOpen(true)}
@@ -1810,10 +1971,7 @@ export default function Home() {
                           ...project,
                           supervisorNotes: [newNote, ...project.supervisorNotes]
                         };
-                        setProject(updated);
-                        try {
-                          localStorage.setItem("projectpilot_project", JSON.stringify(updated));
-                        } catch {}
+                        persistProject(updated);
                       }
                     }}
                   >
@@ -2078,7 +2236,7 @@ export default function Home() {
                   className="btn btn-primary btn-sm"
                   onClick={() => {
                     setSaveStatus("Saving changes...");
-                    setTimeout(() => setSaveStatus("Saved to local browser storage"), 400);
+                    setProject({ ...project });
                   }}
                 >
                   Save Draft
@@ -2171,10 +2329,7 @@ export default function Home() {
                         }
                       };
                       const updatedProject = { ...project, chapters: updatedChapters };
-                      setProject(updatedProject);
-                      try {
-                        localStorage.setItem("projectpilot_project", JSON.stringify(updatedProject));
-                      } catch {}
+                      persistProject(updatedProject);
                     }}
                   />
 
@@ -3433,6 +3588,95 @@ export default function Home() {
             <div style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--text-muted)" }}>
               All exports are formatted to Nigerian university specifications (A4, 1-inch margins, Times New Roman 12pt, 1.5 spacing, APA 7th).
             </div>
+          </div>
+        </div>
+      )}
+
+      {isAccountModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsAccountModalOpen(false)}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-dialog-title"
+            style={{ maxWidth: "480px" }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <h2 id="account-dialog-title" style={{ color: "#ffffff", fontSize: "1.25rem" }}>
+                  {accountMode === "sign-up" ? "Create your account" : "Sign in to ProjectPilot"}
+                </h2>
+                <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginTop: "4px" }}>
+                  Save your project and continue writing on another device.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                aria-label="Close account dialog"
+                onClick={() => setIsAccountModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleAccountSubmit}>
+              <div className="modal-body">
+                {accountMode === "sign-up" && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="account-name">Name</label>
+                    <input className="form-input" id="account-name" name="name" autoComplete="name" maxLength={100} required />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label className="form-label" htmlFor="account-email">Email address</label>
+                  <input className="form-input" id="account-email" name="email" type="email" autoComplete="email" maxLength={254} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="account-password">Password</label>
+                  <input
+                    className="form-input"
+                    id="account-password"
+                    name="password"
+                    type="password"
+                    autoComplete={accountMode === "sign-up" ? "new-password" : "current-password"}
+                    minLength={8}
+                    maxLength={128}
+                    required
+                  />
+                </div>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginBottom: "14px" }}>
+                  Your project drafts and uploaded-document extracts are stored in your Neon account.
+                </p>
+                {accountError && (
+                  <p role="alert" style={{ color: "#fca5a5", fontSize: "0.88rem", marginBottom: "14px" }}>
+                    {accountError}
+                  </p>
+                )}
+                {accountNotice && (
+                  <p role="status" style={{ color: "var(--emerald-400)", fontSize: "0.88rem", marginBottom: "14px" }}>
+                    {accountNotice}
+                  </p>
+                )}
+              </div>
+              <div className="modal-footer" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setAccountMode(accountMode === "sign-up" ? "sign-in" : "sign-up");
+                    setAccountError("");
+                    setAccountNotice("");
+                  }}
+                  disabled={accountBusy}
+                >
+                  {accountMode === "sign-up" ? "Already have an account? Sign in" : "New here? Create an account"}
+                </button>
+                <button className="btn btn-primary btn-sm" type="submit" disabled={accountBusy}>
+                  {accountBusy ? "Please wait..." : accountMode === "sign-up" ? "Create account" : "Sign in"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
