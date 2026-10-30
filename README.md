@@ -18,6 +18,8 @@ The database stores project drafts and extracted text from uploaded documents. A
 
 Generated chapters follow the uploaded guideline, use natural academic prose grounded in the student's project details, cite only uploaded sources, flag missing facts/references, and are checked for a minimum of 500 words excluding the reference list. The count includes the chapter title and headings. The Tables & Diagrams Visual Studio can generate editable table drafts or Mermaid flowcharts/diagrams from a description and supplied details, preview them, download tables as CSV or diagrams as SVG, and insert them at the current editor cursor, after a selected section heading, or at the end of a chosen chapter. Missing research values are marked for review rather than invented. Students should review, verify, and take responsibility for generated content, citations, and visuals before submission.
 
+The export options include the preliminary pages by themselves (title page and available declaration, certification, dedication, acknowledgements, abstract, contents, and table/figure lists), the Chapters 1-3 proposal, and the complete final project manuscript. Preliminary-page exports are available as DOCX or printable PDF and do not require completed chapter drafts.
+
 ## Development
 
 ```bash

@@ -180,8 +180,11 @@ function referenceLines(project) {
   return sortedReferences(project.references || [], project.citationStyle);
 }
 
-export function manuscriptFileName(project, maxChapter = null) {
+export function manuscriptFileName(project, maxChapter = null, options = {}) {
   const base = (project.shortTitle || project.title || "project").replace(/[^a-zA-Z0-9]+/g, "_");
+  if (options.preliminaryOnly) {
+    return `${base}_Preliminary_Pages`;
+  }
   if (maxChapter && maxChapter <= 3) {
     return `${base}_Chapters_1_to_${maxChapter}_Proposal`;
   }
@@ -189,6 +192,7 @@ export function manuscriptFileName(project, maxChapter = null) {
 }
 
 export async function buildDocxBlob(project, options = {}) {
+  const preliminaryOnly = options.preliminaryOnly === true;
   const maxChapter = options.maxChapter || null;
   const docx = await import("docx");
   const {
@@ -267,7 +271,7 @@ export async function buildDocxBlob(project, options = {}) {
   });
 
   const main = [];
-  orderedChapters(project, maxChapter).forEach((chapter, index) => {
+  if (!preliminaryOnly) orderedChapters(project, maxChapter).forEach((chapter, index) => {
 
     main.push(pageTitle(chapter.title || `Chapter ${index + 1}`, index === 0, HeadingLevel.HEADING_1));
 
@@ -361,17 +365,19 @@ export async function buildDocxBlob(project, options = {}) {
     }
   });
 
-  const references = referenceLines(project);
-  if (references.length > 0) {
-    main.push(pageTitle("References", false, HeadingLevel.HEADING_1));
-    references.forEach((reference) =>
-      main.push(new Paragraph({ alignment: AlignmentType.LEFT, indent: { left: 720, hanging: 720 }, spacing: { after: 160, line }, children: [run(reference)] }))
-    );
-  }
-  if (project.appendices?.trim()) {
-    main.push(pageTitle("Appendices", false, HeadingLevel.HEADING_1));
-    for (const block of parseBlocks(project.appendices)) {
-      main.push(block.type === "heading" ? new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 120, line }, children: [run(block.text, { bold: true })] }) : block.type === "list" ? plain(block.text) : body(block.text));
+  if (!preliminaryOnly) {
+    const references = referenceLines(project);
+    if (references.length > 0) {
+      main.push(pageTitle("References", false, HeadingLevel.HEADING_1));
+      references.forEach((reference) =>
+        main.push(new Paragraph({ alignment: AlignmentType.LEFT, indent: { left: 720, hanging: 720 }, spacing: { after: 160, line }, children: [run(reference)] }))
+      );
+    }
+    if (project.appendices?.trim()) {
+      main.push(pageTitle("Appendices", false, HeadingLevel.HEADING_1));
+      for (const block of parseBlocks(project.appendices)) {
+        main.push(block.type === "heading" ? new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 120, line }, children: [run(block.text, { bold: true })] }) : block.type === "list" ? plain(block.text) : body(block.text));
+      }
     }
   }
 
@@ -383,14 +389,16 @@ export async function buildDocxBlob(project, options = {}) {
       children: preliminary
     });
   }
-  sections.push({
-    properties: pageSetup({ start: 1, formatType: NumberFormat.DECIMAL }),
-    footers: { default: footer() },
-    children: main
-  });
+  if (!preliminaryOnly) {
+    sections.push({
+      properties: pageSetup({ start: 1, formatType: NumberFormat.DECIMAL }),
+      footers: { default: footer() },
+      children: main
+    });
+  }
 
   const document = new Document({
-    title: project.title,
+    title: preliminaryOnly ? `${project.title} - Preliminary Pages` : project.title,
     creator: project.studentName || "ProjectPilot",
     features: { updateFields: true },
     sections
@@ -402,6 +410,7 @@ const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
 export function buildPrintableHtml(project, options = {}) {
+  const preliminaryOnly = options.preliminaryOnly === true;
   const maxChapter = options.maxChapter || null;
   const { font, sizePt, spacing } = getFormatting(project);
   const filteredChapters = Object.fromEntries(
@@ -430,7 +439,7 @@ export function buildPrintableHtml(project, options = {}) {
     })
     .join("");
 
-  const main = chapters
+  const main = preliminaryOnly ? "" : chapters
     .map((chapter) => {
       const content = parseBlocks(chapter.content)
         .map((block) => {
@@ -459,15 +468,15 @@ export function buildPrintableHtml(project, options = {}) {
     })
     .join("");
 
-  const references = referenceLines(project);
+  const references = preliminaryOnly ? [] : referenceLines(project);
   const referenceSection = references.length
     ? section("References", references.map((text) => `<p class="reference">${escapeHtml(text)}</p>`).join(""))
     : "";
-  const appendixSection = project.appendices?.trim()
+  const appendixSection = !preliminaryOnly && project.appendices?.trim()
     ? section("Appendices", parseBlocks(project.appendices).map((block) => (block.type === "heading" ? `<h2>${escapeHtml(block.text)}</h2>` : `<p class="${block.type}">${escapeHtml(block.text)}</p>`)).join(""))
     : "";
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(manuscriptFileName(project, maxChapter))}</title><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(manuscriptFileName(project, maxChapter, options))}</title><style>
 @page { size: A4; margin: 1in; }
 body { font-family: '${font.replace(/'/g, "")}', 'Times New Roman', serif; font-size: ${sizePt}pt; line-height: ${spacing}; color: #000; }
 .center { text-align: center; } .bold { font-weight: bold; }

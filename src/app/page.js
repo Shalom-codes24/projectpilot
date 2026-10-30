@@ -1351,14 +1351,17 @@ export default function Home() {
     }
   };
 
-  const checkExportReady = (maxChapter = null) => {
+  const checkExportReady = (maxChapter = null, options = {}) => {
     if (!project.id) {
       setActiveView("dashboard");
       return false;
     }
+    const preliminaryOnly = options.preliminaryOnly === true;
     const isProposal = Boolean(maxChapter && maxChapter <= 3);
-    const targetChapters = Object.entries(project.chapters)
-      .filter(([num]) => (maxChapter ? Number(num) <= maxChapter : true));
+    const targetChapters = preliminaryOnly
+      ? []
+      : Object.entries(project.chapters)
+          .filter(([num]) => (maxChapter ? Number(num) <= maxChapter : true));
 
     const chaptersBelowMinimum = targetChapters
       .filter(([, chapter]) => countChapterWords(`${chapter.title || ""}\n${chapter.content || ""}`) < 400)
@@ -1393,33 +1396,41 @@ export default function Home() {
     return true;
   };
 
-  const handleExportWord = async (maxChapter = null) => {
-    if (!checkExportReady(maxChapter)) return;
+  const handleExportWord = async (maxChapter = null, options = {}) => {
+    if (!checkExportReady(maxChapter, options)) return;
+    const preliminaryOnly = options.preliminaryOnly === true;
     const isProposal = Boolean(maxChapter && maxChapter <= 3);
 
     try {
-      setAiFeedback(isProposal ? "Compiling Chapters 1–3 Research Proposal (.docx)..." : "Compiling Full Manuscript (.docx)...");
-      const blob = await buildDocxBlob(project, { maxChapter });
+      setAiFeedback(preliminaryOnly
+        ? "Compiling Preliminary Pages (.docx)..."
+        : isProposal
+          ? "Compiling Chapters 1–3 Research Proposal (.docx)..."
+          : "Compiling Full Manuscript (.docx)...");
+      const blob = await buildDocxBlob(project, { ...options, maxChapter });
       const url = URL.createObjectURL(blob);
       const downloadLink = document.createElement("a");
       downloadLink.href = url;
-      downloadLink.download = `${manuscriptFileName(project, maxChapter)}.docx`;
+      downloadLink.download = `${manuscriptFileName(project, maxChapter, options)}.docx`;
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
       URL.revokeObjectURL(url);
       setAiFeedback(
-        isProposal
-          ? "✅ Chapters 1 to 3 Research Proposal (.docx) downloaded successfully! Ready for supervisor review & defense."
-          : "✅ Full Manuscript (.docx) downloaded successfully!"
+        preliminaryOnly
+          ? "✅ Preliminary Pages (.docx) downloaded successfully!"
+          : isProposal
+            ? "✅ Chapters 1 to 3 Research Proposal (.docx) downloaded successfully! Ready for supervisor review & defense."
+            : "✅ Full Manuscript (.docx) downloaded successfully!"
       );
     } catch (error) {
       setAiFeedback(`Could not create the DOCX file: ${error.message}`);
     }
   };
 
-  const handleExportPdf = (maxChapter = null) => {
-    if (!checkExportReady(maxChapter)) return;
+  const handleExportPdf = (maxChapter = null, options = {}) => {
+    if (!checkExportReady(maxChapter, options)) return;
+    const preliminaryOnly = options.preliminaryOnly === true;
     const isProposal = Boolean(maxChapter && maxChapter <= 3);
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -1427,15 +1438,17 @@ export default function Home() {
       return;
     }
     printWindow.document.open();
-    printWindow.document.write(buildPrintableHtml(project, { maxChapter }));
+    printWindow.document.write(buildPrintableHtml(project, { ...options, maxChapter }));
     printWindow.document.close();
     printWindow.focus();
     printWindow.onload = () => printWindow.print();
     setTimeout(() => printWindow.print(), 500);
     setAiFeedback(
-      isProposal
-        ? "📄 Chapters 1 to 3 Proposal ready! Print dialog opened (choose 'Save as PDF')."
-        : "📚 Full Manuscript ready! Print dialog opened (choose 'Save as PDF')."
+      preliminaryOnly
+        ? "📄 Preliminary Pages ready! Print dialog opened (choose 'Save as PDF')."
+        : isProposal
+          ? "📄 Chapters 1 to 3 Proposal ready! Print dialog opened (choose 'Save as PDF')."
+          : "📚 Full Manuscript ready! Print dialog opened (choose 'Save as PDF')."
     );
   };
 
@@ -4240,7 +4253,7 @@ export default function Home() {
       )}
 
       {/* ========================================================
-          MODAL 5: EXPORT ACADEMIC MANUSCRIPT (CH 1-3 vs FULL)
+          MODAL 5: EXPORT PRELIMINARY PAGES, PROPOSAL, OR FULL PROJECT
          ======================================================== */}
       {isExportModalOpen && (
         <div className="modal-backdrop" onClick={() => setIsExportModalOpen(false)}>
@@ -4270,7 +4283,72 @@ export default function Home() {
               </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))", gap: "18px", marginBottom: "20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "18px", marginBottom: "20px" }}>
+              {/* PRELIMINARY PAGES */}
+              <div
+                style={{
+                  padding: "20px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "rgba(34, 211, 238, 0.06)",
+                  border: "1px solid rgba(34, 211, 238, 0.3)",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between"
+                }}
+              >
+                <div>
+                  <div style={{ marginBottom: "10px" }}>
+                    <span style={{
+                      fontSize: "0.72rem",
+                      fontWeight: "700",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      padding: "3px 8px",
+                      borderRadius: "4px",
+                      background: "rgba(34, 211, 238, 0.14)",
+                      color: "#a5f3fc"
+                    }}>
+                      Front Matter
+                    </span>
+                  </div>
+                  <h4 style={{ fontSize: "1.1rem", fontWeight: "700", color: "#ffffff", marginBottom: "8px" }}>
+                    Preliminary Pages
+                  </h4>
+                  <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: "1.45", marginBottom: "12px" }}>
+                    Download the title page and available preliminary pages without including Chapters 1–3 or the main manuscript.
+                  </p>
+                  <ul style={{ fontSize: "0.76rem", color: "var(--text-muted)", paddingLeft: "16px", lineHeight: "1.65", margin: "0 0 18px 0" }}>
+                    <li>Title page</li>
+                    <li>Declaration & Certification</li>
+                    <li>Dedication & Acknowledgements</li>
+                    <li>Abstract and contents, when available</li>
+                    <li>Lists of tables and figures, when available</li>
+                  </ul>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      setIsExportModalOpen(false);
+                      handleExportWord(null, { preliminaryOnly: true });
+                    }}
+                    style={{ width: "100%", justifyContent: "center" }}
+                  >
+                    Download Preliminary Pages (.docx)
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setIsExportModalOpen(false);
+                      handleExportPdf(null, { preliminaryOnly: true });
+                    }}
+                    style={{ width: "100%", justifyContent: "center" }}
+                  >
+                    Export Preliminary Pages PDF
+                  </button>
+                </div>
+              </div>
+
               {/* STAGE 1: CHAPTERS 1-3 PROPOSAL */}
               <div
                 style={{
