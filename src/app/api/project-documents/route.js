@@ -8,8 +8,10 @@ PDFParse.setWorker(
 );
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_TOTAL_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_GUIDELINE_CHARS = 60000;
 const MAX_SOURCE_CHARS = 300000;
+const MAX_PREVIOUS_CHAPTER_CHARS = 180000;
 
 async function extractText(file) {
   if (!file || file.size === 0) throw new Error("One of the selected documents is empty.");
@@ -88,35 +90,58 @@ export async function POST(request) {
     }
 
     const formData = await request.formData();
-    const guidelineFile = formData.get("guideline");
+    const mode = formData.get("mode");
+    if (mode !== null && mode !== "new" && mode !== "continue") {
+      return Response.json({ error: "Choose whether to create a new project or continue an existing one." }, { status: 400 });
+    }
+    const continuationMode = mode === "continue";
+    const guidelineValue = formData.get("guideline");
+    const guidelineFile = guidelineValue instanceof File ? guidelineValue : null;
     const sourceFiles = formData.getAll("sources").filter((file) => file instanceof File);
+    const chapterFiles = formData.getAll("chapters").filter((file) => file instanceof File);
 
-    if (!(guidelineFile instanceof File) || sourceFiles.length === 0) {
+    if ((!continuationMode && !guidelineFile) || sourceFiles.length === 0) {
       return Response.json(
-        { error: "Upload a department guideline and at least one project source document." },
+        { error: continuationMode
+          ? "Upload at least one document that supported the project."
+          : "Upload a department guideline and at least one project source document." },
         { status: 400 }
       );
     }
     if (sourceFiles.length > 3) {
       return Response.json({ error: "Upload no more than 3 project source documents. The department guideline is separate." }, { status: 400 });
     }
-    const totalBytes = [guidelineFile, ...sourceFiles].reduce((total, file) => total + file.size, 0);
-    if (totalBytes > 25 * 1024 * 1024) {
+    if (continuationMode && chapterFiles.length !== 3) {
+      return Response.json({ error: "Upload one document for each of Chapters 1, 2, and 3." }, { status: 400 });
+    }
+    if (!continuationMode && chapterFiles.length > 0) {
+      return Response.json({ error: "Chapter uploads are only accepted when continuing an existing project." }, { status: 400 });
+    }
+    const uploadedFiles = [guidelineFile, ...chapterFiles, ...sourceFiles].filter(Boolean);
+    const totalBytes = uploadedFiles.reduce((total, file) => total + file.size, 0);
+    if (totalBytes > MAX_TOTAL_FILE_BYTES) {
       return Response.json({ error: "The combined document size must not exceed 25 MB." }, { status: 413 });
     }
 
-    const rawGuideline = await extractText(guidelineFile);
-    const rawSources = await Promise.all(
-      sourceFiles.map(async (file) => ({ name: file.name, content: await extractText(file) }))
-    );
+    const [rawGuideline, rawSources, rawChapters] = await Promise.all([
+      guidelineFile ? extractText(guidelineFile) : Promise.resolve(""),
+      Promise.all(sourceFiles.map(async (file) => ({ name: file.name, content: await extractText(file) }))),
+      Promise.all(chapterFiles.map(async (file) => ({ name: file.name, content: await extractText(file) })))
+    ]);
 
-    const guideline = shortenGuideline(rawGuideline, MAX_GUIDELINE_CHARS);
+    const guideline = rawGuideline
+      ? shortenGuideline(rawGuideline, MAX_GUIDELINE_CHARS)
+      : "No department guideline was uploaded. Continue the chapter structure, terminology, project scope, and citation style evident in the supplied Chapters 1-3. Follow the selected chapter structure in the project workspace for remaining chapters, and do not claim institution-specific formatting rules.";
     const sources = shortenSourcesCombined(rawSources, MAX_SOURCE_CHARS);
+    const previousChapters = shortenSourcesCombined(rawChapters, MAX_PREVIOUS_CHAPTER_CHARS)
+      .map((chapter, index) => ({ number: index + 1, ...chapter }));
 
     return Response.json({
       guideline,
-      guidelineName: guidelineFile.name,
-      sources
+      guidelineName: guidelineFile?.name || "Structure inferred from Chapters 1-3",
+      guidelineProvided: Boolean(guidelineFile),
+      sources,
+      previousChapters
     });
   } catch (error) {
     return Response.json(

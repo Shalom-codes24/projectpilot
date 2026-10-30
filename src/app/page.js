@@ -123,6 +123,8 @@ export default function Home() {
   const [isOutlineLoading, setIsOutlineLoading] = useState(false);
   const [isAbstractLoading, setIsAbstractLoading] = useState(false);
   const [newStructure, setNewStructure] = useState("standard");
+  const [projectSetupMode, setProjectSetupMode] = useState("new");
+  const [chapterFiles, setChapterFiles] = useState([null, null, null]);
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceResults, setSourceResults] = useState([]);
   const [isSearchingSources, setIsSearchingSources] = useState(false);
@@ -907,6 +909,15 @@ export default function Home() {
           findings: project.findings || "",
           guideline: projectContext.guideline,
           sources: projectContext.sources,
+          previousChapters: Object.entries(project.chapters || {})
+            .filter(([chapterNumber, previousChapter]) =>
+              Number(chapterNumber) < currentChapter && previousChapter.content?.trim()
+            )
+            .map(([chapterNumber, previousChapter]) => ({
+              number: Number(chapterNumber),
+              title: previousChapter.title || `Chapter ${chapterNumber}`,
+              content: previousChapter.content
+            })),
           draft: actionType === "generate" ? "" : editorText,
           feedback: actionType === "refine" ? refinementRequest : (actionType === "expand" ? "Deepen literature, add multi-paragraph academic depth, analytical tables, and theoretical foundations to expand page count." : ""),
           consent: allowAiProcessing
@@ -1232,19 +1243,38 @@ export default function Home() {
     setSourceFiles(selectedFiles);
   };
 
+  const handleChapterFileChange = (chapterIndex, event) => {
+    const selectedFile = event.target.files?.[0] || null;
+    setChapterFiles((currentFiles) =>
+      currentFiles.map((file, index) => index === chapterIndex ? selectedFile : file)
+    );
+    setFormError("");
+  };
+
   const handleCreateProject = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
     setFormError("");
-    if (!guidelineFile || sourceFiles.length === 0) {
-      setFormError("Upload your department guideline and at least one document about your project.");
+    const continuingProject = projectSetupMode === "continue";
+    if (continuingProject && chapterFiles.some((file) => !file)) {
+      setFormError("Upload one document for each of Chapters 1, 2, and 3.");
+      return;
+    }
+    if ((!continuingProject && !guidelineFile) || sourceFiles.length === 0) {
+      setFormError(continuingProject
+        ? "Upload at least one document that supported the project."
+        : "Upload your department guideline and at least one document about your project.");
       return;
     }
 
     setIsAiLoading(true);
     try {
       const formData = new FormData();
-      formData.append("guideline", guidelineFile);
+      formData.append("mode", continuingProject ? "continue" : "new");
+      if (guidelineFile) formData.append("guideline", guidelineFile);
+      if (continuingProject) {
+        chapterFiles.forEach((file) => formData.append("chapters", file));
+      }
       sourceFiles.forEach((file) => formData.append("sources", file));
       const response = await fetch("/api/project-documents", { method: "POST", body: formData });
       const extracted = await response.json();
@@ -1253,8 +1283,22 @@ export default function Home() {
       const projectContext = {
         guideline: extracted.guideline,
         guidelineName: extracted.guidelineName,
+        guidelineProvided: extracted.guidelineProvided,
         sources: extracted.sources
       };
+      const chapters = buildChapters(newStructure);
+      if (continuingProject) {
+        extracted.previousChapters.forEach((previousChapter) => {
+          const chapter = chapters[previousChapter.number];
+          if (!chapter) return;
+          const wordCount = countChapterWords(`${chapter.title}\n${previousChapter.content}`);
+          chapters[previousChapter.number] = {
+            ...chapter,
+            content: sanitizeAcademicDraft(previousChapter.content),
+            progress: Math.min(100, Math.round((wordCount / 2500) * 100))
+          };
+        });
+      }
       const newPrj = {
         ...EMPTY_PROJECT,
         id: "prj_" + Date.now(),
@@ -1271,16 +1315,24 @@ export default function Home() {
         institution: newInstitution,
         citationStyle: newCitation,
         projectContext,
-        chapters: buildChapters(newStructure)
+        chapters
       };
 
       setProject(newPrj);
       setProjectContext(projectContext);
-      setEditorText("");
+      const nextChapter = continuingProject ? 4 : 1;
+      setCurrentChapter(nextChapter);
+      setEditorText(chapters[nextChapter]?.content || "");
+      setAiFeedback(continuingProject
+        ? "Chapters 1-3 imported. Review the project outline, then continue with Chapter 4."
+        : "");
       setIsNewProjectModalOpen(false);
       setActiveView("studio");
-      setCurrentChapter(1);
       setAllowAiProcessing(false);
+      setGuidelineFile(null);
+      setSourceFiles([]);
+      setChapterFiles([null, null, null]);
+      setProjectSetupMode("new");
     } catch (error) {
       setFormError(error.message || "Project setup failed.");
     } finally {
@@ -2795,7 +2847,11 @@ export default function Home() {
                 💡 <strong>Student-Proxy Data Generation:</strong> If you do not have survey or test numbers yet, the AI acts as the student to self-generate realistic raw data tables and statistical findings so your chapter is 100% complete and ready. You can easily adjust the figures later!
               </p>
               <button className="btn btn-secondary btn-sm" onClick={buildOutlineFromGuideline} disabled={isOutlineLoading || !projectContext}>
-                {isOutlineLoading ? "Reading guideline..." : "Build outline from guideline"}
+                {isOutlineLoading
+                  ? "Reading project documents..."
+                  : projectContext?.guidelineProvided === false
+                    ? "Build outline from project materials"
+                    : "Build outline from guideline"}
               </button>
             </div>
 
@@ -2992,11 +3048,11 @@ export default function Home() {
                       checked={allowAiProcessing}
                       onChange={(e) => setAllowAiProcessing(e.target.checked)}
                     />
-                    Send these documents or derived visual prompts to Gemini for writing, refinement, or image generation. Google usage limits and charges may apply.
+                    Send the uploaded chapters, project documents, or derived visual prompts to Gemini for writing, refinement, or image generation. Google usage limits and charges may apply.
                   </label>
                 </>
               ) : (
-                <p>No project documents uploaded. Start a new project and add a department guideline and source documents to enable chapter writing.</p>
+                <p>No project documents uploaded. Start a new project or import Chapters 1-3 and supporting documents to enable chapter writing.</p>
               )}
             </div>
 
@@ -3120,7 +3176,7 @@ export default function Home() {
             {/* In-Text Citations Reference Helper */}
             <div className="ai-card">
               <h4>Source policy</h4>
-              <p className="visual-plan-note">The chapter writer may cite only uploaded project sources. It marks unsupported claims for review instead of inventing references. Verify all generated content and visuals with your supervisor.</p>
+              <p className="visual-plan-note">The chapter writer uses earlier chapters and uploaded project sources to maintain continuity. Review generated content, citations, and any missing evidence with your supervisor.</p>
             </div>
           </aside>
         </main>
@@ -3135,10 +3191,12 @@ export default function Home() {
             <div className="modal-header">
               <div>
                 <h3 style={{ fontSize: "1.25rem", fontWeight: "700", color: "#ffffff" }}>
-                  New Academic Project Setup
+                  {projectSetupMode === "continue" ? "Continue an Existing Project" : "New Academic Project Setup"}
                 </h3>
                 <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                  Provide your academic details to configure your 5-chapter workspace.
+                  {projectSetupMode === "continue"
+                    ? "Import your first three chapters and the documents that supported your research."
+                    : "Provide your academic details to configure your project workspace."}
                 </p>
               </div>
               <button
@@ -3151,6 +3209,30 @@ export default function Home() {
             </div>
 
             <form onSubmit={handleCreateProject}>
+              <div role="group" aria-label="Project setup type" style={{ display: "flex", gap: "8px", padding: "16px 24px 0" }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${projectSetupMode === "new" ? "btn-primary" : "btn-secondary"}`}
+                  aria-pressed={projectSetupMode === "new"}
+                  onClick={() => {
+                    setProjectSetupMode("new");
+                    setFormError("");
+                  }}
+                >
+                  Start a new project
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${projectSetupMode === "continue" ? "btn-primary" : "btn-secondary"}`}
+                  aria-pressed={projectSetupMode === "continue"}
+                  onClick={() => {
+                    setProjectSetupMode("continue");
+                    setFormError("");
+                  }}
+                >
+                  Continue an existing project
+                </button>
+              </div>
               <div className="modal-body">
                 <div className="form-group">
                   <label className="form-label">Degree Level & Program</label>
@@ -3228,23 +3310,60 @@ export default function Home() {
                   />
                 </div>
 
+                {projectSetupMode === "continue" && (
+                  <div className="form-group document-upload-group">
+                    <label className="form-label">Upload your existing chapters (required)</label>
+                    <p className="upload-help">Choose one file for each chapter. ProjectPilot will import these into Chapters 1-3 and use them to keep the remaining chapters consistent. Use text-readable/searchable PDFs, DOCX, TXT, or Markdown files; scanned image-only PDFs are not supported. Up to 8 MB per file and 25 MB total across all uploads.</p>
+                    {[1, 2, 3].map((chapterNumber, index) => (
+                      <div className="form-group" key={chapterNumber}>
+                        <label className="form-label" htmlFor={`existing-chapter-${chapterNumber}`}>Chapter {chapterNumber}</label>
+                        <input
+                          id={`existing-chapter-${chapterNumber}`}
+                          className="form-input file-input"
+                          type="file"
+                          accept=".pdf,.docx,.txt,.md"
+                          required
+                          onChange={(event) => handleChapterFileChange(index, event)}
+                        />
+                        {chapterFiles[index] && <span className="selected-file">{chapterFiles[index].name}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="form-group document-upload-group">
-                  <label className="form-label" htmlFor="department-guideline">Department / university project guideline (required)</label>
-                  <p className="upload-help">Upload the document that specifies your required chapter structure and formatting. This is separate from your 3 project documents. Use a text-readable/searchable PDF, DOCX, TXT, or Markdown file; scanned image-only PDFs are not supported. Up to 8 MB per file and 25 MB total.</p>
+                  <label className="form-label" htmlFor="department-guideline">
+                    Department / university project guideline ({projectSetupMode === "continue" ? "optional" : "required"})
+                  </label>
+                  <p className="upload-help">
+                    {projectSetupMode === "continue"
+                      ? "If available, upload the guideline so the remaining chapters match your department's requirements. Without one, the outline follows your imported chapters and the selected chapter structure."
+                      : "Upload the document that specifies your required chapter structure and formatting. This is separate from your 3 project documents."}
+                    {" "}Use a text-readable/searchable PDF, DOCX, TXT, or Markdown file; scanned image-only PDFs are not supported. Up to 8 MB per file and 25 MB total.
+                  </p>
                   <input
                     id="department-guideline"
                     className="form-input file-input"
                     type="file"
                     accept=".pdf,.docx,.txt,.md"
-                    required
+                    required={projectSetupMode === "new"}
                     onChange={(e) => setGuidelineFile(e.target.files?.[0] || null)}
                   />
                   {guidelineFile && <span className="selected-file">{guidelineFile.name}</span>}
                 </div>
 
                 <div className="form-group document-upload-group">
-                  <label className="form-label" htmlFor="project-sources">Documents related to your project (at least one required)</label>
-                  <p className="upload-help">Choose up to 3 useful sources, such as your proposal, approved topic, research materials, report, or dataset. Only material from these files may be cited. Use text-readable/searchable PDFs, DOCX, TXT, or Markdown; scanned image-only PDFs are not supported. Up to 8 MB per file, 25 MB total.</p>
+                  <label className="form-label" htmlFor="project-sources">
+                    {projectSetupMode === "continue"
+                      ? "Documents that supported the writing (at least one required)"
+                      : "Documents related to your project (at least one required)"}
+                  </label>
+                  <p className="upload-help">
+                    {projectSetupMode === "continue"
+                      ? "Upload the proposal, research materials, reports, dataset, or other documents used to write the first chapters. ProjectPilot will use these with Chapters 1-3 when drafting the remaining chapters."
+                      : "Choose useful sources, such as your proposal, approved topic, research materials, report, or dataset."}
+                    {" "}Choose up to 3. Only material from these files may be cited. Use text-readable/searchable PDFs, DOCX, TXT, or Markdown; scanned image-only PDFs are not supported. Up to 8 MB per file and 25 MB total across all uploads.
+                  </p>
                   <input
                     id="project-sources"
                     className="form-input file-input"
@@ -3264,13 +3383,19 @@ export default function Home() {
                 {formError && <p className="form-error" role="alert">{formError}</p>}
 
                 <div className="form-group">
-                  <label className="form-label" htmlFor="chapter-structure">Chapter structure</label>
+                  <label className="form-label" htmlFor="chapter-structure">
+                    {projectSetupMode === "continue" ? "Structure for remaining chapters" : "Chapter structure"}
+                  </label>
                   <select id="chapter-structure" className="form-select" value={newStructure} onChange={(e) => setNewStructure(e.target.value)}>
                     {Object.entries(CHAPTER_STRUCTURES).map(([key, structure]) => (
                       <option key={key} value={key}>{structure.label}</option>
                     ))}
                   </select>
-                  <p className="upload-help">This is the common Nigerian format. Use &ldquo;Build outline from guideline&rdquo; in the studio to match your department handbook, which always takes priority.</p>
+                  <p className="upload-help">
+                    {projectSetupMode === "continue"
+                      ? "This structure is used for chapters after the three you import. Your uploaded department guideline takes priority."
+                      : "This is the common Nigerian format. Use &ldquo;Build outline from guideline&rdquo; in the studio to match your department handbook, which always takes priority."}
+                  </p>
                 </div>
 
                 <div className="form-group">
@@ -3298,7 +3423,11 @@ export default function Home() {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary btn-sm" disabled={isAiLoading}>
-                  {isAiLoading ? "Extracting project documents..." : "Launch Chapter Workspace →"}
+                  {isAiLoading
+                    ? "Reading project documents..."
+                    : projectSetupMode === "continue"
+                      ? "Import Chapters 1-3 & Continue →"
+                      : "Launch Chapter Workspace →"}
                 </button>
               </div>
             </form>
