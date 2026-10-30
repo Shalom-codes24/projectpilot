@@ -92,6 +92,9 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState("landing"); // 'landing' | 'dashboard' | 'studio'
   const [project, setProject] = useState(EMPTY_PROJECT);
+  const [savedProjects, setSavedProjects] = useState([]);
+  const [projectsError, setProjectsError] = useState("");
+  const [loadingProjectId, setLoadingProjectId] = useState("");
   const [accountUser, setAccountUser] = useState(null);
   const [accountReady, setAccountReady] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -190,41 +193,122 @@ export default function Home() {
     if (!user) {
       setAccountUser(null);
       setAccountReady(false);
+      setSavedProjects([]);
       return null;
     }
 
     setAccountUser(user);
-    const projectResponse = await fetch("/api/projects");
+    const fetchProjects = async () => {
+      const response = await fetch("/api/projects");
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not load your saved projects.");
+      return result.projects || [];
+    };
+
+    let projects = await fetchProjects();
+    const localProjectData = localStorage.getItem("projectpilot_project");
+    let localProject = null;
+    if (localProjectData) {
+      localProject = JSON.parse(localProjectData);
+    }
+
+    if (localProject?.id && !projects.some((savedProject) => savedProject.id === localProject.id)) {
+      const saveResponse = await fetch("/api/projects", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: localProject })
+      });
+      const saveResult = await saveResponse.json();
+      if (!saveResponse.ok) {
+        throw new Error(saveResult.error || "Could not move your browser project to your account.");
+      }
+      projects = await fetchProjects();
+    }
+
+    setSavedProjects(projects);
+    setProjectsError("");
+    const projectToOpen = localProject?.id
+      ? projects.find((savedProject) => savedProject.id === localProject.id)
+      : projects[0];
+
+    if (!projectToOpen) {
+      applyLoadedProject(EMPTY_PROJECT);
+      localStorage.removeItem("projectpilot_project");
+      setAccountReady(true);
+      return user;
+    }
+
+    const projectResponse = await fetch(`/api/projects?id=${encodeURIComponent(projectToOpen.id)}`);
     const projectResult = await projectResponse.json();
     if (!projectResponse.ok) {
-      applyLoadedProject(EMPTY_PROJECT);
       throw new Error(projectResult.error || "Could not load your saved project.");
     }
 
-    let savedProject = projectResult.project;
-    if (!savedProject) {
-      const localProject = localStorage.getItem("projectpilot_project");
-      if (localProject) {
-        const parsedLocalProject = JSON.parse(localProject);
-        if (parsedLocalProject?.id) {
-          const saveResponse = await fetch("/api/projects", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ project: parsedLocalProject })
-          });
-          const saveResult = await saveResponse.json();
-          if (!saveResponse.ok) {
-            throw new Error(saveResult.error || "Could not move your browser project to your account.");
-          }
-          savedProject = parsedLocalProject;
-        }
-      }
-    }
-
-    if (savedProject) applyLoadedProject(savedProject);
+    applyLoadedProject(projectResult.project);
     localStorage.removeItem("projectpilot_project");
     setAccountReady(true);
     return user;
+  };
+
+  const openSavedProject = async (projectId) => {
+    if (projectId === project.id) {
+      setActiveView("studio");
+      return;
+    }
+
+    setLoadingProjectId(projectId);
+    setProjectsError("");
+    try {
+      if (accountReady && project.id) {
+        const saveResponse = await fetch("/api/projects", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project })
+        });
+        const saveResult = await saveResponse.json();
+        if (!saveResponse.ok) {
+          throw new Error(saveResult.error || "Could not save your current project before opening another.");
+        }
+        setSavedProjects((currentProjects) => currentProjects.map((savedProject) =>
+          savedProject.id === project.id
+            ? { ...savedProject, updatedAt: saveResult.updatedAt }
+            : savedProject
+        ));
+      }
+
+      const response = await fetch(`/api/projects?id=${encodeURIComponent(projectId)}`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not open this project.");
+
+      applyLoadedProject(result.project);
+      setCurrentChapter(1);
+      setActiveView("studio");
+    } catch (error) {
+      setProjectsError(error.message || "Could not open this project.");
+    } finally {
+      setLoadingProjectId("");
+    }
+  };
+
+  const updateProjectCompletion = async (projectId, completed) => {
+    setProjectsError("");
+    try {
+      const response = await fetch("/api/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, completed })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not update this project.");
+
+      setSavedProjects((currentProjects) => currentProjects.map((savedProject) =>
+        savedProject.id === projectId
+          ? { ...savedProject, completedAt: result.completedAt }
+          : savedProject
+      ));
+    } catch (error) {
+      setProjectsError(error.message || "Could not update this project.");
+    }
   };
 
   const handleAccountSubmit = async (event) => {
@@ -303,6 +387,7 @@ export default function Home() {
       if (accountReady) localStorage.removeItem("projectpilot_project");
       setAccountUser(null);
       setAccountReady(false);
+      setSavedProjects([]);
       applyLoadedProject(localProject || EMPTY_PROJECT);
       setActiveView("landing");
       setSaveStatus("Signed out");
@@ -345,6 +430,7 @@ export default function Home() {
     }
 
     loadAccountProject().catch((error) => {
+      setProjectsError(error.message || "Could not load your saved projects.");
       setSaveStatus(error.message || "Could not connect to your account.");
     });
   }, []);
@@ -375,7 +461,28 @@ export default function Home() {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Could not save your project.");
-        if (!cancelled) setSaveStatus("Saved to your account");
+        if (!cancelled) {
+          setSavedProjects((currentProjects) => {
+            const existing = currentProjects.find((savedProject) => savedProject.id === project.id);
+            const savedSummary = {
+              id: project.id,
+              title: project.title,
+              department: project.department,
+              institution: project.institution,
+              updatedAt: result.updatedAt,
+              completedAt: result.completedAt
+            };
+            const updatedProjects = [
+              savedSummary,
+              ...currentProjects.filter((savedProject) => savedProject.id !== project.id)
+            ];
+            if (existing?.completedAt && !result.completedAt) {
+              savedSummary.completedAt = existing.completedAt;
+            }
+            return updatedProjects;
+          });
+          setSaveStatus("Saved to your account");
+        }
       } catch (error) {
         if (!cancelled) setSaveStatus(`Cloud save failed: ${error.message || "Please retry."}`);
       }
@@ -1734,6 +1841,106 @@ export default function Home() {
       {activeView === "dashboard" && (
         <main className="dashboard-wrapper">
           <div className="container">
+            <section className="glass-card" aria-labelledby="saved-projects-heading" style={{ padding: "24px", marginBottom: "28px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "14px", flexWrap: "wrap", marginBottom: "18px" }}>
+                <div>
+                  <h2 id="saved-projects-heading" style={{ color: "#ffffff", fontSize: "1.25rem" }}>Your Projects</h2>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginTop: "3px" }}>
+                    {accountUser ? "Projects saved to your account, including completed work." : "Your current project is saved on this device."}
+                  </p>
+                </div>
+                <button className="btn btn-primary btn-sm" onClick={() => setIsNewProjectModalOpen(true)}>
+                  + New Project
+                </button>
+              </div>
+
+              {projectsError && (
+                <p role="alert" style={{ color: "#fca5a5", fontSize: "0.88rem", marginBottom: "14px" }}>
+                  {projectsError}
+                </p>
+              )}
+
+              {accountUser && !accountReady ? (
+                <p role="status" style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Loading your saved projects...</p>
+              ) : (accountUser ? savedProjects : project.id ? [project] : []).length > 0 ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "14px" }}>
+                  {(accountUser ? savedProjects : project.id ? [project] : []).map((savedProject) => {
+                    const isCompleted = Boolean(savedProject.completedAt);
+                    return (
+                      <article
+                        key={savedProject.id}
+                        className="glass-card"
+                        style={{
+                          padding: "18px",
+                          borderColor: savedProject.id === project.id ? "rgba(139, 92, 246, 0.6)" : undefined
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
+                          <span className={`badge ${isCompleted ? "badge-emerald" : "badge-violet"}`}>
+                            {isCompleted ? "Completed" : savedProject.id === project.id ? "In progress" : "Saved"}
+                          </span>
+                          {savedProject.id === project.id && (
+                            <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Current</span>
+                          )}
+                        </div>
+                        <h3 style={{ color: "#ffffff", fontSize: "1rem", lineHeight: "1.4", marginTop: "12px", overflowWrap: "anywhere" }}>
+                          {savedProject.title || "Untitled project"}
+                        </h3>
+                        <p style={{ color: "var(--text-secondary)", fontSize: "0.82rem", marginTop: "5px" }}>
+                          {[savedProject.department, savedProject.institution].filter(Boolean).join(" • ") || "Academic project"}
+                        </p>
+                        <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: "8px" }}>
+                          {savedProject.updatedAt
+                            ? `Last saved ${new Date(savedProject.updatedAt).toLocaleDateString()}`
+                            : "Saved on this device"}
+                        </p>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "14px" }}>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => accountUser ? openSavedProject(savedProject.id) : setActiveView("studio")}
+                            disabled={loadingProjectId === savedProject.id}
+                          >
+                            {loadingProjectId === savedProject.id
+                              ? "Opening..."
+                              : savedProject.id === project.id ? "Continue writing" : "Open project"}
+                          </button>
+                          {accountUser && (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => updateProjectCompletion(savedProject.id, !isCompleted)}
+                            >
+                              {isCompleted ? "Reopen" : "Mark completed"}
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ border: "1px dashed rgba(255,255,255,0.14)", borderRadius: "var(--radius-md)", padding: "22px", textAlign: "center" }}>
+                  <p style={{ color: "var(--text-secondary)", marginBottom: "12px" }}>
+                    No saved projects yet. Create a project and it will appear here.
+                  </p>
+                  {accountUser ? (
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Your projects will stay available here whenever you sign in.</p>
+                  ) : (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        setAccountMode("sign-in");
+                        setAccountError("");
+                        setAccountNotice("");
+                        setIsAccountModalOpen(true);
+                      }}
+                    >
+                      Sign in to sync projects across devices
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+
             {!project.id ? (
               <div className="glass-card" style={{ maxWidth: "720px", margin: "64px auto", padding: "36px", textAlign: "center" }}>
                 <h1 style={{ color: "#ffffff", marginBottom: "12px" }}>Start with your project details</h1>
