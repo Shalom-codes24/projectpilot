@@ -88,6 +88,17 @@ function MermaidDiagram({ code, id }) {
   return <div ref={containerRef} className="mermaid-render-target" />;
 }
 
+function getSectionHeadings(content = "") {
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) =>
+      line.length > 0 &&
+      line.length <= 160 &&
+      /^(?:\d+(?:\.\d+)*[.)]?\s+\S.+|chapter\s+\w+\b.*)$/i.test(line)
+    );
+}
+
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState("landing"); // 'landing' | 'dashboard' | 'studio'
@@ -162,6 +173,18 @@ export default function Home() {
     `graph TD\n  Start([Research Problem]) --> Review[Literature Review]\n  Review --> Method[Methodology & Data Collection]\n  Method --> Analysis[Empirical Data Analysis]\n  Analysis --> Results[Results & Discussion]\n  Results --> End([Conclusion & Recommendations])`
   );
   const diagramModalPreviewRef = useRef(null);
+  const [isVisualStudioOpen, setIsVisualStudioOpen] = useState(false);
+  const [visualKind, setVisualKind] = useState("table");
+  const [visualDescription, setVisualDescription] = useState("");
+  const [visualSuppliedData, setVisualSuppliedData] = useState("");
+  const [visualGenerating, setVisualGenerating] = useState(false);
+  const [visualError, setVisualError] = useState("");
+  const [visualNotes, setVisualNotes] = useState("");
+  const [visualTargetChapter, setVisualTargetChapter] = useState("1");
+  const [visualInsertPosition, setVisualInsertPosition] = useState("cursor");
+  const [visualTargetHeading, setVisualTargetHeading] = useState("");
+  const [visualPreviewError, setVisualPreviewError] = useState("");
+  const visualPreviewRef = useRef(null);
 
   // New Project Form State
   const [newTitle, setNewTitle] = useState("");
@@ -530,6 +553,33 @@ export default function Home() {
     };
   }, [diagramModalCode, isDiagramModalOpen]);
 
+  useEffect(() => {
+    if (!isVisualStudioOpen || visualKind === "table" || !visualPreviewRef.current) return;
+    const preview = visualPreviewRef.current;
+    preview.innerHTML = "";
+    setVisualPreviewError("");
+    if (!diagramModalCode.trim()) return;
+
+    let isMounted = true;
+    import("mermaid")
+      .then(({ default: mermaid }) => {
+        mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "dark" });
+        return mermaid.render(`visual-studio-${Date.now()}`, sanitizeOrConvertMermaid(diagramModalCode));
+      })
+      .then((result) => {
+        if (isMounted && visualPreviewRef.current) {
+          visualPreviewRef.current.innerHTML = result.svg;
+        }
+      })
+      .catch((error) => {
+        if (isMounted) setVisualPreviewError(error.message || "Could not render this Mermaid diagram.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [diagramModalCode, isVisualStudioOpen, visualKind]);
+
   // Insert text at cursor in editorText
   const insertTextAtCursor = (before, after = "") => {
     const textarea = editorTextareaRef.current;
@@ -575,11 +625,6 @@ export default function Home() {
     const updatedProject = { ...project, chapters: updatedChapters };
     setProject(updatedProject);
     setAiFeedback("✨ Draft cleaned! Removed markdown signs (**, ##, <br/>) and standardized academic formatting.");
-  };
-
-  const openTableBuilderModal = () => {
-    setTableCaption(`Table ${currentChapter}.1: Demographic Characteristics of Respondents`);
-    setIsTableModalOpen(true);
   };
 
   const applyTablePreset = (presetName) => {
@@ -691,6 +736,170 @@ export default function Home() {
     setDiagramCode(cleanCode);
     handleEditorChange({ target: { value: updatedText } });
     setIsDiagramModalOpen(false);
+  };
+
+  const openVisualStudio = (kind = "table") => {
+    setVisualKind(kind);
+    setVisualDescription("");
+    setVisualSuppliedData("");
+    setVisualNotes("");
+    setVisualError("");
+    setVisualPreviewError("");
+    setVisualTargetChapter(String(currentChapter));
+    setVisualInsertPosition("cursor");
+    setVisualTargetHeading("");
+    setTableCaption(`Table ${currentChapter}.1: Custom Project Table`);
+    setDiagramModalCaption(`Figure ${currentChapter}.1: Project Diagram`);
+    setIsVisualStudioOpen(true);
+  };
+
+  const handleGenerateVisual = async () => {
+    if (!visualDescription.trim()) {
+      setVisualError("Describe what the table or diagram should show.");
+      return;
+    }
+    if (!allowAiProcessing) {
+      setVisualError("Confirm that you want the visual description and supplied details sent to Gemini.");
+      return;
+    }
+
+    setVisualGenerating(true);
+    setVisualError("");
+    try {
+      const chapterNumber = Number(visualTargetChapter);
+      const chapter = project.chapters[chapterNumber];
+      if (!chapter) throw new Error("Choose a chapter in this project.");
+
+      const response = await fetch("/api/generate-visual", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(customApiKey ? { "x-gemini-api-key": customApiKey } : {})
+        },
+        body: JSON.stringify({
+          kind: visualKind,
+          project: {
+            title: project.title,
+            department: project.department,
+            institution: project.institution,
+            citationStyle: project.citationStyle
+          },
+          chapter: { number: chapterNumber, title: chapter.title },
+          description: visualDescription,
+          suppliedData: visualSuppliedData,
+          consent: allowAiProcessing
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not generate the visual.");
+
+      setVisualNotes(result.notes || "");
+      if (result.kind === "table") {
+        setTableCaption(result.caption);
+        setTableHeaders(result.headers);
+        setTableRowsData(result.rows);
+      } else {
+        setDiagramModalCaption(result.caption);
+        setDiagramModalCode(result.mermaid);
+      }
+    } catch (error) {
+      setVisualError(error.message || "Could not generate the visual.");
+    } finally {
+      setVisualGenerating(false);
+    }
+  };
+
+  const buildVisualBlock = () => {
+    if (visualKind === "table") {
+      const cleanCell = (value) => String(value ?? "").replace(/\|/g, "/").replace(/\r?\n/g, " ").trim();
+      const headerLine = `| ${tableHeaders.map(cleanCell).join(" | ")} |`;
+      const separator = `| ${tableHeaders.map(() => "---").join(" | ")} |`;
+      const rows = tableRowsData
+        .map((row) => `| ${tableHeaders.map((_, index) => cleanCell(row[index])).join(" | ")} |`)
+        .join("\n");
+      return `${tableCaption.trim()}\n${headerLine}\n${separator}\n${rows}`;
+    }
+
+    const caption = diagramModalCaption.trim();
+    const code = sanitizeOrConvertMermaid(diagramModalCode.trim());
+    if (!code) throw new Error("Enter or generate a Mermaid diagram before inserting it.");
+    return `${caption}\n\`\`\`mermaid\n${code}\n\`\`\`\n*${caption}.*`;
+  };
+
+  const handleInsertVisualIntoProject = () => {
+    try {
+      const targetNumber = Number(visualTargetChapter);
+      const targetChapter = project.chapters[targetNumber];
+      if (!targetChapter) throw new Error("Choose a chapter in this project.");
+      if (visualInsertPosition === "cursor" && targetNumber !== currentChapter) {
+        throw new Error("Choose the current chapter to insert at the editor cursor, or select a section or chapter end.");
+      }
+      const block = buildVisualBlock();
+
+      if (visualInsertPosition === "cursor" && targetNumber === currentChapter) {
+        insertTextAtCursor(`\n\n${block}\n\n`);
+        setAiFeedback(`${visualKind === "table" ? "Table" : "Diagram"} inserted at the editor cursor in Chapter ${targetNumber}.`);
+        setIsVisualStudioOpen(false);
+        return;
+      }
+
+      let updatedContent = targetChapter.content || "";
+      if (visualInsertPosition === "section") {
+        if (!visualTargetHeading) throw new Error("Choose a section heading for insertion.");
+        const lines = updatedContent.split("\n");
+        const headingIndex = lines.findIndex((line) => line.trim() === visualTargetHeading);
+        if (headingIndex < 0) throw new Error("That section heading is no longer in the selected chapter.");
+        lines.splice(headingIndex + 1, 0, "", block, "");
+        updatedContent = lines.join("\n");
+      } else {
+        updatedContent = `${updatedContent.trimEnd()}${updatedContent.trim() ? "\n\n" : ""}${block}\n`;
+      }
+
+      setProject({
+        ...project,
+        chapters: {
+          ...project.chapters,
+          [targetNumber]: { ...targetChapter, content: updatedContent }
+        }
+      });
+      if (targetNumber === currentChapter) setEditorText(updatedContent);
+      setAiFeedback(`${visualKind === "table" ? "Table" : "Diagram"} inserted in Chapter ${targetNumber}.`);
+      setIsVisualStudioOpen(false);
+    } catch (error) {
+      setVisualError(error.message || "Could not insert the visual.");
+    }
+  };
+
+  const handleDownloadVisual = () => {
+    let content;
+    let mimeType;
+    let extension;
+
+    if (visualKind === "table") {
+      const escapeCsv = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+      content = [tableHeaders, ...tableRowsData].map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+      mimeType = "text/csv;charset=utf-8";
+      extension = "csv";
+    } else {
+      const svg = visualPreviewRef.current?.querySelector("svg");
+      if (!svg) {
+        setVisualError(visualPreviewError || "Wait for the diagram preview to render before downloading it.");
+        return;
+      }
+      content = new XMLSerializer().serializeToString(svg);
+      mimeType = "image/svg+xml;charset=utf-8";
+      extension = "svg";
+    }
+
+    const safeTitle = (project.shortTitle || project.title || "project").replace(/[^a-z0-9]+/gi, "_");
+    const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeTitle}_chapter_${visualTargetChapter}_${visualKind}.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const handleRegenerateChapterFlowchart = () => {
@@ -2525,17 +2734,17 @@ export default function Home() {
               <div className="ribbon-group">
                 <button
                   className="ribbon-btn ribbon-btn-primary"
-                  onClick={openTableBuilderModal}
-                  title="Insert an APA formatted table"
+                  onClick={() => openVisualStudio("table")}
+                  title="Describe, generate, edit, download, or insert a project table"
                 >
-                  <span>⊞</span> <strong>Insert Table</strong>
+                  <span>⊞</span> <strong>Tables & Diagrams</strong>
                 </button>
                 <button
-                  className="ribbon-btn ribbon-btn-primary"
-                  onClick={openDiagramStudioModal}
-                  title="Draw and insert an academic flowchart or diagram"
+                  className="ribbon-btn"
+                  onClick={() => openVisualStudio("flowchart")}
+                  title="Describe, generate, edit, download, or insert an academic flowchart"
                 >
-                  <span>📊</span> <strong>Draw Diagram</strong>
+                  <span>📊</span> <strong>Generate Flowchart</strong>
                 </button>
               </div>
 
@@ -3431,6 +3640,292 @@ export default function Home() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          VISUAL STUDIO (GENERATE, EDIT, DOWNLOAD, INSERT)
+         ======================================================== */}
+      {isVisualStudioOpen && (
+        <div className="modal-backdrop" onClick={() => setIsVisualStudioOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: "1000px", maxHeight: "92vh", overflowY: "auto" }} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="badge badge-violet" style={{ marginBottom: "6px" }}>Tables & Diagrams</span>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "#ffffff" }}>Visual Studio</h3>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "3px" }}>
+                  Describe what you need, review the result, then download it or insert it into a chapter.
+                </p>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsVisualStudioOpen(false)} aria-label="Close visual studio">✕</button>
+            </div>
+
+            <div className="modal-body">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="visual-kind">Visual type</label>
+                  <select
+                    id="visual-kind"
+                    className="form-select"
+                    value={visualKind}
+                    onChange={(event) => {
+                      setVisualKind(event.target.value);
+                      setVisualError("");
+                    }}
+                  >
+                    <option value="table">Academic table</option>
+                    <option value="flowchart">Process flowchart</option>
+                    <option value="diagram">Other Mermaid diagram</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="visual-target-chapter">Insert into chapter</label>
+                  <select
+                    id="visual-target-chapter"
+                    className="form-select"
+                    value={visualTargetChapter}
+                    onChange={(event) => {
+                      setVisualTargetChapter(event.target.value);
+                      setVisualTargetHeading("");
+                      if (event.target.value !== String(currentChapter) && visualInsertPosition === "cursor") {
+                        setVisualInsertPosition("end");
+                      }
+                    }}
+                  >
+                    {Object.entries(project.chapters || {}).map(([chapterNumber, chapter]) => (
+                      <option key={chapterNumber} value={chapterNumber}>
+                        Chapter {chapterNumber}: {chapter.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="visual-description">
+                  What should the {visualKind === "table" ? "table" : visualKind === "flowchart" ? "flowchart" : "diagram"} show?
+                </label>
+                <textarea
+                  id="visual-description"
+                  className="form-textarea"
+                  rows="3"
+                  maxLength={6000}
+                  value={visualDescription}
+                  onChange={(event) => setVisualDescription(event.target.value)}
+                  placeholder={visualKind === "table"
+                    ? "Describe the table's purpose, columns, categories, and how the supplied figures should be organized."
+                    : "Describe the steps or components and how they connect. Include the order and any decision branches you want shown."}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="visual-supplied-data">
+                  {visualKind === "table" ? "Your actual data or table values (optional)" : "Exact labels, steps, and relationships (optional)"}
+                </label>
+                <textarea
+                  id="visual-supplied-data"
+                  className="form-textarea"
+                  rows="3"
+                  maxLength={12000}
+                  value={visualSuppliedData}
+                  onChange={(event) => setVisualSuppliedData(event.target.value)}
+                  placeholder={visualKind === "table"
+                    ? "Paste the real results you want shown. Missing values will be marked “Not provided”; the generator will not invent statistics."
+                    : "List only the steps and relationships that should appear. Missing details will be flagged for review."}
+                />
+              </div>
+
+              <label className="consent-label" style={{ marginBottom: "14px" }}>
+                <input
+                  type="checkbox"
+                  checked={allowAiProcessing}
+                  onChange={(event) => setAllowAiProcessing(event.target.checked)}
+                />
+                Send this description and any supplied details to Gemini to generate the visual.
+              </label>
+
+              {visualError && <p className="form-error" role="alert">{visualError}</p>}
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
+                <button className="btn btn-primary btn-sm" onClick={handleGenerateVisual} disabled={visualGenerating}>
+                  {visualGenerating ? "Generating visual..." : "Generate preview"}
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={handleDownloadVisual}>
+                  Download {visualKind === "table" ? "CSV" : "SVG"}
+                </button>
+                {visualKind === "table" ? (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setIsVisualStudioOpen(false);
+                      setIsTableModalOpen(true);
+                    }}
+                  >
+                    Open manual table editor
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setIsVisualStudioOpen(false);
+                      setIsDiagramModalOpen(true);
+                    }}
+                  >
+                    Open manual diagram editor
+                  </button>
+                )}
+              </div>
+
+              {visualKind === "table" ? (
+                <>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="visual-table-caption">Table caption</label>
+                    <input
+                      id="visual-table-caption"
+                      className="form-input"
+                      value={tableCaption}
+                      onChange={(event) => setTableCaption(event.target.value)}
+                    />
+                  </div>
+                  <div className="table-builder-grid-wrap">
+                    <table className="table-builder-table">
+                      <thead>
+                        <tr>
+                          {tableHeaders.map((header, columnIndex) => (
+                            <th key={`visual-header-${columnIndex}`}>
+                              <input
+                                aria-label={`Table column ${columnIndex + 1} heading`}
+                                value={header}
+                                onChange={(event) => setTableHeaders((current) =>
+                                  current.map((value, index) => index === columnIndex ? event.target.value : value)
+                                )}
+                              />
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tableRowsData.map((row, rowIndex) => (
+                          <tr key={`visual-row-${rowIndex}`}>
+                            {tableHeaders.map((_, columnIndex) => (
+                              <td key={`visual-cell-${rowIndex}-${columnIndex}`}>
+                                <input
+                                  aria-label={`Table row ${rowIndex + 1}, column ${columnIndex + 1}`}
+                                  value={row[columnIndex] || ""}
+                                  onChange={(event) => setTableRowsData((current) =>
+                                    current.map((currentRow, index) =>
+                                      index === rowIndex
+                                        ? tableHeaders.map((__, cellIndex) => cellIndex === columnIndex ? event.target.value : currentRow[cellIndex] || "")
+                                        : currentRow
+                                    )
+                                  )}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ marginTop: "10px" }}
+                    onClick={() => setTableRowsData((current) => [...current, new Array(tableHeaders.length).fill("")])}
+                  >
+                    + Add row
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="visual-diagram-caption">Diagram caption</label>
+                    <input
+                      id="visual-diagram-caption"
+                      className="form-input"
+                      value={diagramModalCaption}
+                      onChange={(event) => setDiagramModalCaption(event.target.value)}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "14px" }}>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="visual-mermaid-code">Mermaid definition (editable)</label>
+                      <textarea
+                        id="visual-mermaid-code"
+                        className="form-input"
+                        style={{ fontFamily: "var(--font-mono)", minHeight: "260px", resize: "vertical" }}
+                        value={diagramModalCode}
+                        onChange={(event) => setDiagramModalCode(event.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <span className="form-label">Live preview</span>
+                      <div
+                        ref={visualPreviewRef}
+                        className="diagram-preview"
+                        style={{ minHeight: "260px", overflow: "auto", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        aria-label="Generated diagram preview"
+                      />
+                      {visualPreviewError && <p className="form-error" role="alert">{visualPreviewError}</p>}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {visualNotes && (
+                <p className="upload-help" role="status" style={{ marginTop: "12px" }}>
+                  Review note: {visualNotes}
+                </p>
+              )}
+
+              <div className="form-group" style={{ marginTop: "20px" }}>
+                <label className="form-label" htmlFor="visual-insert-position">Where should it go?</label>
+                <select
+                  id="visual-insert-position"
+                  className="form-select"
+                  value={visualInsertPosition}
+                  onChange={(event) => {
+                    setVisualInsertPosition(event.target.value);
+                    setVisualTargetHeading("");
+                  }}
+                >
+                  <option value="cursor" disabled={visualTargetChapter !== String(currentChapter)}>At the editor cursor in the current chapter</option>
+                  <option value="section">After a section heading in the selected chapter</option>
+                  <option value="end">At the end of the selected chapter</option>
+                </select>
+              </div>
+              {visualInsertPosition === "section" && (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="visual-target-heading">Section heading</label>
+                  <select
+                    id="visual-target-heading"
+                    className="form-select"
+                    value={visualTargetHeading}
+                    onChange={(event) => setVisualTargetHeading(event.target.value)}
+                  >
+                    <option value="">Choose a heading</option>
+                    {getSectionHeadings(project.chapters[Number(visualTargetChapter)]?.content || "").map((heading, index) => (
+                      <option key={`${heading}-${index}`} value={heading}>{heading}</option>
+                    ))}
+                  </select>
+                  {!getSectionHeadings(project.chapters[Number(visualTargetChapter)]?.content || "").length && (
+                    <p className="upload-help">This chapter has no numbered section headings yet. Add one, or insert the visual at the chapter end.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary btn-sm" onClick={() => setIsVisualStudioOpen(false)}>Close</button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleInsertVisualIntoProject}
+                disabled={visualKind === "table" ? tableHeaders.length < 2 || tableRowsData.length === 0 : !diagramModalCode.trim()}
+              >
+                Insert into Chapter {visualTargetChapter}
+              </button>
+            </div>
           </div>
         </div>
       )}
