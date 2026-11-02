@@ -1,3 +1,5 @@
+export const maxDuration = 120;
+
 function rebuildAbstract(index) {
   if (!index || typeof index !== "object") return "";
   const words = [];

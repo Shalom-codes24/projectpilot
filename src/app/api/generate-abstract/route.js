@@ -1,5 +1,7 @@
 import { GEMINI_TEXT_MODEL, executeWithKeyRotation } from "../../../lib/gemini";
 
+export const maxDuration = 120;
+
 export async function POST(request) {
   const clientKey = request.headers.get("x-gemini-api-key");
 

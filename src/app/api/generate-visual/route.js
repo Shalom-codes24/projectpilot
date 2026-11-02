@@ -1,6 +1,8 @@
 import { GEMINI_TEXT_MODEL, executeWithKeyRotation } from "../../../lib/gemini";
 import { sanitizeOrConvertMermaid } from "../../../lib/diagram-utils";
 
+export const maxDuration = 120;
+
 const MAX_DESCRIPTION_CHARS = 6000;
 const MAX_DATA_CHARS = 12000;
 

@@ -3,6 +3,8 @@ import { GEMINI_TEXT_MODEL, executeWithKeyRotation } from "../../../lib/gemini";
 import { sanitizeOrConvertMermaid, getDefaultChapterFlowchart } from "../../../lib/diagram-utils";
 import { sanitizeAcademicDraft } from "../../../lib/clean-draft";
 
+export const maxDuration = 120;
+
 function cleanAndParseJson(text) {
   if (typeof text !== "string") return null;
 

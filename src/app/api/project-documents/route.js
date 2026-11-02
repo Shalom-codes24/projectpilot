@@ -7,15 +7,17 @@ PDFParse.setWorker(
   pathToFileURL(join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs")).href
 );
 
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_TOTAL_FILE_BYTES = 25 * 1024 * 1024;
+export const maxDuration = 60;
+
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_TOTAL_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_GUIDELINE_CHARS = 60000;
 const MAX_SOURCE_CHARS = 300000;
 const MAX_PREVIOUS_CHAPTER_CHARS = 180000;
 
 async function extractText(file) {
   if (!file || file.size === 0) throw new Error("One of the selected documents is empty.");
-  if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name} exceeds the 8 MB file size limit.`);
+  if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name} exceeds the 4 MB file size limit.`);
 
   const extension = file.name.split(".").pop()?.toLowerCase();
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -85,8 +87,8 @@ function shortenSourcesCombined(sources, maxCombinedChars = MAX_SOURCE_CHARS) {
 export async function POST(request) {
   try {
     const requestBytes = Number(request.headers.get("content-length"));
-    if (Number.isFinite(requestBytes) && requestBytes > 30 * 1024 * 1024) {
-      return Response.json({ error: "The total upload request exceeds the 30 MB limit." }, { status: 413 });
+    if (Number.isFinite(requestBytes) && requestBytes > 4.4 * 1024 * 1024) {
+      return Response.json({ error: "The total upload request exceeds the 4 MB limit." }, { status: 413 });
     }
 
     const formData = await request.formData();
@@ -120,7 +122,7 @@ export async function POST(request) {
     const uploadedFiles = [guidelineFile, ...chapterFiles, ...sourceFiles].filter(Boolean);
     const totalBytes = uploadedFiles.reduce((total, file) => total + file.size, 0);
     if (totalBytes > MAX_TOTAL_FILE_BYTES) {
-      return Response.json({ error: "The combined document size must not exceed 25 MB." }, { status: 413 });
+      return Response.json({ error: "The combined document size must not exceed 4 MB." }, { status: 413 });
     }
 
     const [rawGuideline, rawSources, rawChapters] = await Promise.all([

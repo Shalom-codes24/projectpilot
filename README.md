@@ -28,3 +28,10 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+## Deploying to Vercel
+
+1. Push the repository to GitHub and import it at https://vercel.com/new (Framework: Next.js).
+2. Add these Environment Variables (Production, Preview): `GEMINI_API_KEY`, `DATABASE_URL`, `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET` (32+ characters). Optional: `GEMINI_MODEL`, `GEMINI_IMAGE_MODEL`.
+3. Deploy, then add the Vercel domain to Neon Auth's trusted domains.
+4. Vercel limits request bodies to about 4.5 MB, so document uploads are capped at 4 MB in total.
