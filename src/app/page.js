@@ -75,7 +75,7 @@ function MermaidDiagram({ code, id }) {
     return (
       <div className="academic-diagram-fallback" style={{ margin: "16px 0", padding: "16px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid rgba(139, 92, 246, 0.35)", borderRadius: "8px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", fontSize: "0.8rem", color: "var(--violet-300)" }}>
-          <span style={{ fontWeight: 600 }}>ðŸ“Š Methodological / System Framework Diagram</span>
+          <span style={{ fontWeight: 600 }}>📊 Methodological / System Framework Diagram</span>
           <span style={{ fontSize: "0.72rem", color: "#f87171" }}>Syntax note: Monospace fallback rendered</span>
         </div>
         <pre style={{ margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: "0.82rem", color: "#38bdf8", lineHeight: "1.45", overflowX: "auto", whiteSpace: "pre-wrap" }}>
@@ -1288,7 +1288,7 @@ export default function Home() {
       }, 0);
       const newTotalPages = Math.round(newTotalWords / 280) + 10;
       setAiFeedback(
-        `ðŸŽ‰ Chapter ${currentChapter} written in full (${generatedWordCount.toLocaleString()} words, ~${generatedPages} pages)! Current manuscript length: ~${newTotalPages} / 70+ page target.`
+        `🎉 Chapter ${currentChapter} written in full (${generatedWordCount.toLocaleString()} words, ~${generatedPages} pages)! Current manuscript length: ~${newTotalPages} / 70+ page target.`
       );
       if (actionType === "refine") setRefinementRequest("");
     } catch (error) {
@@ -1531,7 +1531,7 @@ export default function Home() {
     if (unresolved > 0) {
       warnings.push(`${unresolved} placeholder(s) such as [PROJECT DETAIL NEEDED] or [SOURCE NEEDED] are still in Chapters 1 to ${maxChapter || 5}.`);
     }
-    if (warnings.length > 0 && !window.confirm(`Before exporting:\n\nâ€¢ ${warnings.join("\nâ€¢ ")}\n\nExport anyway?`)) {
+    if (warnings.length > 0 && !window.confirm(`Before exporting:\n\n• ${warnings.join("\n• ")}\n\nExport anyway?`)) {
       return false;
     }
     return true;
@@ -1546,7 +1546,7 @@ export default function Home() {
       setAiFeedback(preliminaryOnly
         ? "Compiling Preliminary Pages (.docx)..."
         : isProposal
-          ? "Compiling Chapters 1â€“3 Research Proposal (.docx)..."
+          ? "Compiling Chapters 1–3 Research Proposal (.docx)..."
           : "Compiling Full Manuscript (.docx)...");
       const blob = await buildDocxBlob(project, { ...options, maxChapter });
       const url = URL.createObjectURL(blob);
@@ -1559,10 +1559,10 @@ export default function Home() {
       URL.revokeObjectURL(url);
       setAiFeedback(
         preliminaryOnly
-          ? "âœ… Preliminary Pages (.docx) downloaded successfully!"
+          ? "✅ Preliminary Pages (.docx) downloaded successfully!"
           : isProposal
-            ? "âœ… Chapters 1 to 3 Research Proposal (.docx) downloaded successfully! Ready for supervisor review & defense."
-            : "âœ… Full Manuscript (.docx) downloaded successfully!"
+            ? "✅ Chapters 1 to 3 Research Proposal (.docx) downloaded successfully! Ready for supervisor review & defense."
+            : "✅ Full Manuscript (.docx) downloaded successfully!"
       );
     } catch (error) {
       setAiFeedback(`Could not create the DOCX file: ${error.message}`);
@@ -1586,10 +1586,10 @@ export default function Home() {
     setTimeout(() => printWindow.print(), 500);
     setAiFeedback(
       preliminaryOnly
-        ? "ðŸ“„ Preliminary Pages ready! Print dialog opened (choose 'Save as PDF')."
+        ? "📄 Preliminary Pages ready! Print dialog opened (choose 'Save as PDF')."
         : isProposal
-          ? "ðŸ“„ Chapters 1 to 3 Proposal ready! Print dialog opened (choose 'Save as PDF')."
-          : "ðŸ“š Full Manuscript ready! Print dialog opened (choose 'Save as PDF')."
+          ? "📄 Chapters 1 to 3 Proposal ready! Print dialog opened (choose 'Save as PDF')."
+          : "📚 Full Manuscript ready! Print dialog opened (choose 'Save as PDF')."
     );
   };
 
@@ -1775,7 +1775,7 @@ export default function Home() {
               title="API Keys Pool & Auto-Failover"
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
-              <span>ðŸ”‘</span>
+              <span>🔑</span>
               <span>{keysStatus.totalKeys || 3} Keys</span>
               <span
                 style={{
@@ -1832,7 +1832,7 @@ export default function Home() {
             <div className="container hero-content">
               <div className="badge badge-violet">
                 <span className="pulse-dot"></span>
-                <span>AI-Powered Academic Assistant â€¢ Built for African & Global Universities</span>
+                <span>AI-Powered Academic Assistant • Built for African & Global Universities</span>
               </div>
 
               <h1 className="hero-title">
@@ -1876,16 +1876,16 @@ export default function Home() {
 
               <div className="hero-trust">
                 <div className="trust-item">
-                  <span style={{ color: "var(--emerald-400)" }}>âœ“</span> Zero Hallucinated Citations
+                  <span style={{ color: "var(--emerald-400)" }}>✓</span> Zero Hallucinated Citations
                 </div>
                 <div className="trust-item">
-                  <span style={{ color: "var(--emerald-400)" }}>âœ“</span> 5-Chapter NUC & Global Formats
+                  <span style={{ color: "var(--emerald-400)" }}>✓</span> 5-Chapter NUC & Global Formats
                 </div>
                 <div className="trust-item">
-                  <span style={{ color: "var(--emerald-400)" }}>âœ“</span> Taro Yamane & Cochran Sampling Tools
+                  <span style={{ color: "var(--emerald-400)" }}>✓</span> Taro Yamane & Cochran Sampling Tools
                 </div>
                 <div className="trust-item">
-                  <span style={{ color: "var(--emerald-400)" }}>âœ“</span> Word (.docx) & PDF Export
+                  <span style={{ color: "var(--emerald-400)" }}>✓</span> Word (.docx) & PDF Export
                 </div>
               </div>
 
@@ -1903,23 +1903,23 @@ export default function Home() {
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
                       </svg>
-                      <span>ProjectPilot Studio â€¢ Chapter 1: Introduction</span>
+                      <span>ProjectPilot Studio • Chapter 1: Introduction</span>
                     </div>
                     <div className="window-stats">
                       <span><strong>2,480</strong> words</span>
-                      <span>â€¢</span>
+                      <span>•</span>
                       <span style={{ color: "var(--emerald-400)" }}>Auto-saved 1m ago</span>
                     </div>
                   </div>
 
                   <div style={{ padding: "32px", textAlign: "left", background: "#060b1b" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                      <span className="badge badge-cyan">Section 1.2 â€” Statement of the Problem</span>
+                      <span className="badge badge-cyan">Section 1.2 — Statement of the Problem</span>
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => setActiveView("studio")}
                       >
-                        Open Interactive Studio â†’
+                        Open Interactive Studio →
                       </button>
                     </div>
 
@@ -1980,7 +1980,7 @@ export default function Home() {
               <div className="features-grid">
                 {/* Feature 1 */}
                 <div className="glass-card feature-card">
-                  <div className="feature-icon-box">ðŸ’¡</div>
+                  <div className="feature-icon-box">💡</div>
                   <h3 className="feature-title">AI Project Topic Assistant</h3>
                   <p className="feature-desc">
                     Overcome topic choice anxiety. Input your course of study and research interests to generate viable, novel, and supervisor-ready topics with formulated research problems and feasible objectives.
@@ -1994,7 +1994,7 @@ export default function Home() {
 
                 {/* Feature 2 */}
                 <div className="glass-card feature-card">
-                  <div className="feature-icon-box">âœï¸</div>
+                  <div className="feature-icon-box">✍️</div>
                   <h3 className="feature-title">Chapter-by-Chapter Studio</h3>
                   <p className="feature-desc">
                     Never stare at a 100-page blank document again. Work chapter-by-chapter with structured sections: Background, Problem Statement, Empirical Review, Methodology, and Findings.
@@ -2008,7 +2008,7 @@ export default function Home() {
 
                 {/* Feature 3 */}
                 <div className="glass-card feature-card">
-                  <div className="feature-icon-box">ðŸ“š</div>
+                  <div className="feature-icon-box">📚</div>
                   <h3 className="feature-title">Credible Source & Citation Manager</h3>
                   <p className="feature-desc">
                     Seamlessly format citations in APA 7th, Harvard, MLA, Chicago, and IEEE. Connect with verified bibliographic records from OpenAlex and Crossref without made-up citations.
@@ -2022,7 +2022,7 @@ export default function Home() {
 
                 {/* Feature 4 */}
                 <div className="glass-card feature-card">
-                  <div className="feature-icon-box">ðŸ”¬</div>
+                  <div className="feature-icon-box">🔬</div>
                   <h3 className="feature-title">Methodology & Sampling Assistant</h3>
                   <p className="feature-desc">
                     Plan Chapter Three with confidence. Formulate research designs, sample sizes using Taro Yamane or Cochran formulas, questionnaire drafts, and reliability validation criteria.
@@ -2036,7 +2036,7 @@ export default function Home() {
 
                 {/* Feature 5 */}
                 <div className="glass-card feature-card">
-                  <div className="feature-icon-box">ðŸ›¡ï¸</div>
+                  <div className="feature-icon-box">🛡️</div>
                   <h3 className="feature-title">Project Consistency Checker</h3>
                   <p className="feature-desc">
                     Ensure your research questions strictly align with your research objectives, methodology, questionnaire items, and Chapter 5 conclusions before submitting to your supervisor.
@@ -2050,7 +2050,7 @@ export default function Home() {
 
                 {/* Feature 6 */}
                 <div className="glass-card feature-card">
-                  <div className="feature-icon-box">ðŸ“</div>
+                  <div className="feature-icon-box">📝</div>
                   <h3 className="feature-title">Supervisor Revision & DOCX Export</h3>
                   <p className="feature-desc">
                     Log and track supervisor corrections per chapter. Once approved, export your entire project into a clean Microsoft Word (.docx/.doc) document with Times New Roman 1.5 spacing.
@@ -2130,7 +2130,7 @@ export default function Home() {
 
                 <div className="integrity-points">
                   <div className="integrity-point">
-                    <div className="point-icon">âœ“</div>
+                    <div className="point-icon">✓</div>
                     <div>
                       <strong style={{ color: "#ffffff", display: "block" }}>No Hallucinated Citations</strong>
                       <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
@@ -2140,7 +2140,7 @@ export default function Home() {
                   </div>
 
                   <div className="integrity-point">
-                    <div className="point-icon">âœ“</div>
+                    <div className="point-icon">✓</div>
                     <div>
                       <strong style={{ color: "#ffffff", display: "block" }}>Student Voice Preserved</strong>
                       <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
@@ -2150,7 +2150,7 @@ export default function Home() {
                   </div>
 
                   <div className="integrity-point">
-                    <div className="point-icon">âœ“</div>
+                    <div className="point-icon">✓</div>
                     <div>
                       <strong style={{ color: "#ffffff", display: "block" }}>Institutional Policy Compliant</strong>
                       <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
@@ -2215,7 +2215,7 @@ export default function Home() {
                     <li><button className="footer-link" onClick={() => setActiveView("studio")}>Chapter Studio</button></li>
                     <li><button className="footer-link" onClick={() => setActiveView("dashboard")}>Student Dashboard</button></li>
                     <li><button className="footer-link" onClick={() => setIsNewProjectModalOpen(true)}>Topic Generator</button></li>
-                    <li><button className="footer-link" onClick={() => handleExportWord(3)}>Download Ch 1â€“3 Proposal</button></li>
+                    <li><button className="footer-link" onClick={() => handleExportWord(3)}>Download Ch 1–3 Proposal</button></li>
                     <li><button className="footer-link" onClick={() => handleExportWord()}>Full Word .docx Export</button></li>
                   </ul>
                 </div>
@@ -2242,7 +2242,7 @@ export default function Home() {
               </div>
 
               <div className="footer-bottom">
-                <div>Â© 2026 ProjectPilot Technologies Inc. All rights reserved.</div>
+                <div>© 2026 ProjectPilot Technologies Inc. All rights reserved.</div>
                 <div>Designed for Nigerian & Global University Scholars.</div>
               </div>
             </div>
@@ -2302,7 +2302,7 @@ export default function Home() {
                           {savedProject.title || "Untitled project"}
                         </h3>
                         <p style={{ color: "var(--text-secondary)", fontSize: "0.82rem", marginTop: "5px" }}>
-                          {[savedProject.department, savedProject.institution].filter(Boolean).join(" â€¢ ") || "Academic project"}
+                          {[savedProject.department, savedProject.institution].filter(Boolean).join(" • ") || "Academic project"}
                         </p>
                         <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: "8px" }}>
                           {savedProject.updatedAt
@@ -2371,11 +2371,11 @@ export default function Home() {
             <div className="dashboard-header">
               <div className="dashboard-greeting">
                 <div className="badge badge-cyan" style={{ marginBottom: "8px" }}>
-                  Active Candidate â€¢ Matric: {project.matricNumber}
+                  Active Candidate • Matric: {project.matricNumber}
                 </div>
                 <h1>Welcome back, {project.studentName}</h1>
                 <p>
-                  {project.degree} â€¢ {project.department}, {project.institution}
+                  {project.degree} • {project.department}, {project.institution}
                 </p>
               </div>
 
@@ -2395,7 +2395,7 @@ export default function Home() {
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
                   </svg>
-                  <span>Download Ch 1â€“3 Proposal (.docx)</span>
+                  <span>Download Ch 1–3 Proposal (.docx)</span>
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => handleExportWord()} title="Download Full 5-Chapter Project">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2409,7 +2409,7 @@ export default function Home() {
                   <span>Export Options...</span>
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={() => setActiveView("studio")}>
-                  <span>Continue Writing â†’</span>
+                  <span>Continue Writing →</span>
                 </button>
               </div>
             </div>
@@ -2418,9 +2418,9 @@ export default function Home() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "20px", marginBottom: "32px" }}>
               <div className="glass-card" style={{ padding: "20px", border: "1px solid rgba(139, 92, 246, 0.4)", background: "linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(255, 255, 255, 0.03))" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.85rem", color: "var(--violet-300)", fontWeight: "600" }}>ðŸ“– 70+ Page Target</span>
+                  <span style={{ fontSize: "0.85rem", color: "var(--violet-300)", fontWeight: "600" }}>📖 70+ Page Target</span>
                   <span style={{ fontSize: "0.72rem", padding: "2px 8px", borderRadius: "10px", background: estimatedTotalPages >= 70 ? "rgba(16, 185, 129, 0.2)" : "rgba(139, 92, 246, 0.2)", color: estimatedTotalPages >= 70 ? "var(--emerald-400)" : "var(--violet-300)", fontWeight: "600" }}>
-                    {estimatedTotalPages >= 70 ? "Target Met! ðŸŽ‰" : `${Math.max(0, 70 - estimatedTotalPages)} pgs to goal`}
+                    {estimatedTotalPages >= 70 ? "Target Met! 🎉" : `${Math.max(0, 70 - estimatedTotalPages)} pgs to goal`}
                   </span>
                 </div>
                 <div style={{ fontSize: "1.8rem", fontWeight: "800", color: "#ffffff", marginTop: "4px" }}>
@@ -2488,9 +2488,9 @@ export default function Home() {
                 <h2 className="project-title-large">{project.title}</h2>
 
                 <div className="project-meta-row">
-                  <span>ðŸ›ï¸ {project.institution}</span>
-                  <span>ðŸ‘¨â€ðŸ« {project.supervisor}</span>
-                  <span>ðŸ“… Updated today</span>
+                  <span>🏛️ {project.institution}</span>
+                  <span>👨‍🏫 {project.supervisor}</span>
+                  <span>📅 Updated today</span>
                 </div>
 
                 <div>
@@ -2527,7 +2527,7 @@ export default function Home() {
                             {ch.title}
                           </div>
                           <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                            {chapterWords.toLocaleString()} words (~{Math.max(1, Math.round(chapterWords / 280))} pages) â€¢ {chapterWords >= 2000 ? "full chapter depth" : chapterWords >= 600 ? "drafted" : "needs drafting"}
+                            {chapterWords.toLocaleString()} words (~{Math.max(1, Math.round(chapterWords / 280))} pages) • {chapterWords >= 2000 ? "full chapter depth" : chapterWords >= 600 ? "drafted" : "needs drafting"}
                           </div>
                         </div>
 
@@ -2538,7 +2538,7 @@ export default function Home() {
                             {chapterWords >= 2000 ? `~${Math.round(chapterWords / 280)} pgs (Complete)` : chapterWords >= 600 ? `~${Math.round(chapterWords / 280)} pgs (Draft)` : "In progress"}
                           </span>
                           <button className="btn btn-ghost btn-sm" style={{ padding: "4px 8px" }}>
-                            Edit â†’
+                            Edit →
                           </button>
                         </div>
                       </div>
@@ -2570,7 +2570,7 @@ export default function Home() {
                       </p>
                       <div style={{ marginTop: "8px", display: "flex", justifyContent: "flex-end" }}>
                         <span style={{ fontSize: "0.75rem", color: note.resolved ? "var(--emerald-400)" : "var(--amber-400)", fontWeight: "600" }}>
-                          {note.resolved ? "âœ“ Correction Resolved" : "â— Needs Revision"}
+                          {note.resolved ? "✓ Correction Resolved" : "● Needs Revision"}
                         </span>
                       </div>
                     </div>
@@ -2622,7 +2622,7 @@ export default function Home() {
                       }}
                       title="Download Chapters 1 to 3 Proposal for departmental defense"
                     >
-                      ðŸ“„ Download Ch 1â€“3 Proposal (.docx)
+                      📄 Download Ch 1–3 Proposal (.docx)
                     </button>
                     <button
                       className="btn btn-secondary btn-sm"
@@ -2630,7 +2630,7 @@ export default function Home() {
                       style={{ textAlign: "left", justifyContent: "flex-start" }}
                       title="Download Full 5-Chapter Project Manuscript"
                     >
-                      ðŸ“š Download Full Manuscript (.docx)
+                      📚 Download Full Manuscript (.docx)
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
@@ -2638,7 +2638,7 @@ export default function Home() {
                       style={{ textAlign: "left", justifyContent: "flex-start", border: "1px solid rgba(255, 255, 255, 0.1)" }}
                       title="Choose Proposal or Full Project in Word or PDF"
                     >
-                      ðŸ–¨ï¸ Export Options & PDF...
+                      🖨️ Export Options & PDF...
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
@@ -2721,7 +2721,7 @@ export default function Home() {
                         const chWords = countChapterWords(`${ch?.title || ""}\n${ch?.content || ""}`);
                         const chPages = Math.max(1, Math.round(chWords / 280));
                         return chWords >= 2000
-                          ? `âœ“ ~${chPages} pgs`
+                          ? `✓ ~${chPages} pgs`
                           : chWords > 0
                           ? `~${chPages} pgs`
                           : "Empty";
@@ -2771,13 +2771,13 @@ export default function Home() {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                <span style={{ fontSize: "1.05rem" }}>ðŸŽ“</span>
+                <span style={{ fontSize: "1.05rem" }}>🎓</span>
                 <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#f3e8ff" }}>
-                  Chapters 1â€“3 Proposal
+                  Chapters 1–3 Proposal
                 </span>
               </div>
               <p style={{ fontSize: "0.75rem", color: "var(--violet-200)", lineHeight: "1.4", margin: "0 0 10px 0" }}>
-                Universities require Chapters 1â€“3 approved for proposal defense before data gathering (Chapters 4 & 5).
+                Universities require Chapters 1–3 approved for proposal defense before data gathering (Chapters 4 & 5).
               </p>
               <div style={{ display: "flex", gap: "6px" }}>
                 <button
@@ -2793,7 +2793,7 @@ export default function Home() {
                   }}
                   title="Download Chapters 1 to 3 Word Document"
                 >
-                  ðŸ“„ Word (.docx)
+                  📄 Word (.docx)
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"
@@ -2825,7 +2825,7 @@ export default function Home() {
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "0.83rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "8px" }}>
                   <span><strong>{wordCount.toLocaleString()}</strong> words (~{Math.max(1, Math.round(wordCount / 280))} pgs)</span>
-                  <span style={{ color: "var(--text-muted)" }}>â€¢</span>
+                  <span style={{ color: "var(--text-muted)" }}>•</span>
                   <span style={{ color: "var(--violet-300)", fontWeight: "600" }}>Project: ~{estimatedTotalPages} / 70+ pgs</span>
                 </span>
                 <button
@@ -2846,7 +2846,7 @@ export default function Home() {
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
                   </svg>
-                  <span>Export Ch 1â€“3 (Proposal)</span>
+                  <span>Export Ch 1–3 (Proposal)</span>
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => handleExportWord()} title="Export Full 5-Chapter Manuscript">
                   Export Full DOCX
@@ -2874,14 +2874,14 @@ export default function Home() {
                   onClick={() => setEditorViewMode("editor")}
                   title="Edit draft text"
                 >
-                  <span>ðŸ“</span> Draft Editor
+                  <span>📝</span> Draft Editor
                 </button>
                 <button
                   className={`ribbon-btn ${editorViewMode === "preview" ? "active" : ""}`}
                   onClick={() => setEditorViewMode("preview")}
                   title="Live formatted Word-style manuscript preview"
                 >
-                  <span>ðŸ‘ï¸</span> Word Preview
+                  <span>👁️</span> Word Preview
                 </button>
               </div>
 
@@ -2891,14 +2891,14 @@ export default function Home() {
                   onClick={() => openVisualStudio("table")}
                   title="Describe, generate, edit, download, or insert a project table"
                 >
-                  <span>âŠž</span> <strong>Tables & Diagrams</strong>
+                  <span>⊞</span> <strong>Tables & Diagrams</strong>
                 </button>
                 <button
                   className="ribbon-btn"
                   onClick={() => openVisualStudio("flowchart")}
                   title="Describe, generate, edit, download, or insert an academic flowchart"
                 >
-                  <span>ðŸ“Š</span> <strong>Generate Flowchart</strong>
+                  <span>📊</span> <strong>Generate Flowchart</strong>
                 </button>
               </div>
 
@@ -2916,13 +2916,13 @@ export default function Home() {
                   H3
                 </button>
                 <button className="ribbon-btn" onClick={() => insertFormatting("bullet")} title="Bullet List">
-                  â€¢ List
+                  • List
                 </button>
                 <button className="ribbon-btn" onClick={() => insertFormatting("numbered")} title="Numbered List">
                   1. List
                 </button>
                 <button className="ribbon-btn" onClick={() => insertFormatting("quote")} title="Blockquote">
-                  â Quote
+                  ❝ Quote
                 </button>
                 <button
                   className="ribbon-btn"
@@ -2961,11 +2961,11 @@ export default function Home() {
                     <div className="studio-flowchart-card">
                       <div className="studio-flowchart-header">
                         <div className="studio-flowchart-title">
-                          <span style={{ fontSize: "1.2rem" }}>ðŸ“Š</span>
+                          <span style={{ fontSize: "1.2rem" }}>📊</span>
                           <div>
                             <h4>Figure {currentChapter}.1: Methodological & Conceptual Framework Flowchart</h4>
                             <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                              Live visual rendering â€¢ Embedded in Chapter {currentChapter} manuscript
+                              Live visual rendering • Embedded in Chapter {currentChapter} manuscript
                             </span>
                           </div>
                           <span className="studio-flowchart-badge">Active Visual</span>
@@ -2977,7 +2977,7 @@ export default function Home() {
                             onClick={() => openDiagramStudioModal(diagramCode, `Figure ${currentChapter}.1: Methodological Framework`)}
                             title="Edit flowchart nodes, text, and structure in Diagram Studio"
                           >
-                            âœï¸ Edit Diagram
+                            ✏️ Edit Diagram
                           </button>
                           <button
                             type="button"
@@ -2985,7 +2985,7 @@ export default function Home() {
                             onClick={handleRegenerateChapterFlowchart}
                             title="Regenerate or reset to standard university chapter framework"
                           >
-                            ðŸ”„ Reset
+                            🔄 Reset
                           </button>
                           <button
                             type="button"
@@ -2993,7 +2993,7 @@ export default function Home() {
                             onClick={handleDownloadDiagramSvg}
                             title="Download high-resolution SVG of this flowchart"
                           >
-                            ðŸ’¾ Download SVG
+                            💾 Download SVG
                           </button>
                           <button
                             type="button"
@@ -3001,7 +3001,7 @@ export default function Home() {
                             onClick={() => setIsFlowchartCardVisible(!isFlowchartCardVisible)}
                             title={isFlowchartCardVisible ? "Collapse diagram preview" : "Expand diagram preview"}
                           >
-                            {isFlowchartCardVisible ? "â–² Collapse" : "â–¼ Expand"}
+                            {isFlowchartCardVisible ? "▲ Collapse" : "▼ Expand"}
                           </button>
                         </div>
                       </div>
@@ -3020,7 +3020,7 @@ export default function Home() {
                   ) : (
                     <div className="studio-flowchart-empty-card">
                       <div className="studio-flowchart-empty-info">
-                        <span className="studio-flowchart-empty-icon">ðŸ“Š</span>
+                        <span className="studio-flowchart-empty-icon">📊</span>
                         <div>
                           <strong style={{ color: "#ffffff", fontSize: "0.95rem" }}>
                             No Flowchart Embedded in Chapter {currentChapter}
@@ -3051,10 +3051,10 @@ export default function Home() {
                   <div className={`word-count-status ${wordCount >= 2000 ? "meets-minimum" : ""}`} aria-live="polite" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span>
                       {wordCount >= 2000
-                        ? `ðŸŽ‰ Full Chapter Depth (${wordCount.toLocaleString()} words, ~${Math.round(wordCount / 280)} pages)`
+                        ? `🎉 Full Chapter Depth (${wordCount.toLocaleString()} words, ~${Math.round(wordCount / 280)} pages)`
                         : wordCount >= 600
-                        ? `âœ“ Chapter Drafted (${wordCount.toLocaleString()} words, ~${Math.round(wordCount / 280)} pgs). Use "Expand & Deepen" to reach full 2,500+ words.`
-                        : `${wordCount.toLocaleString()} words (~${Math.max(1, Math.round(wordCount / 280))} pages) â€¢ Aim for 2,500â€“4,000 words per chapter.`}
+                        ? `✓ Chapter Drafted (${wordCount.toLocaleString()} words, ~${Math.round(wordCount / 280)} pgs). Use "Expand & Deepen" to reach full 2,500+ words.`
+                        : `${wordCount.toLocaleString()} words (~${Math.max(1, Math.round(wordCount / 280))} pages) • Aim for 2,500–4,000 words per chapter.`}
                     </span>
                     <span style={{ fontSize: "0.8rem", color: "var(--violet-300)", fontWeight: "600" }}>
                       Manuscript: ~{estimatedTotalPages} / 70+ pgs target
@@ -3065,10 +3065,10 @@ export default function Home() {
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                     <div style={{ fontSize: "0.85rem", color: "var(--violet-300)", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span>ðŸ‘ï¸</span> <strong>Word Manuscript Preview (APA 7th Format)</strong> â€¢ Chapter {currentChapter}
+                      <span>👁️</span> <strong>Word Manuscript Preview (APA 7th Format)</strong> • Chapter {currentChapter}
                     </div>
                     <button className="btn btn-secondary btn-sm" onClick={() => setEditorViewMode("editor")}>
-                      âœï¸ Edit Draft
+                      ✏️ Edit Draft
                     </button>
                   </div>
 
@@ -3126,18 +3126,18 @@ export default function Home() {
           <aside className="workspace-ai-panel">
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                <span style={{ fontSize: "1.1rem" }}>ðŸ›ï¸</span>
+                <span style={{ fontSize: "1.1rem" }}>🏛️</span>
                 <h3 style={{ fontSize: "1rem", fontWeight: "700", color: "#ffffff" }}>
                   Full-Blown Chapter Author
                 </h3>
               </div>
               <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: "1.4" }}>
-                Authors complete, publication-grade academic chapters (2,500â€“4,000+ words). Fully written without outlines or placeholders to reach the 70+ page dissertation target.
+                Authors complete, publication-grade academic chapters (2,500–4,000+ words). Fully written without outlines or placeholders to reach the 70+ page dissertation target.
               </p>
 
               <div style={{ padding: "10px 12px", background: "rgba(139, 92, 246, 0.12)", border: "1px solid rgba(139, 92, 246, 0.25)", borderRadius: "8px", marginTop: "10px", marginBottom: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.78rem" }}>
-                  <span style={{ fontWeight: "700", color: "var(--violet-200)" }}>ðŸŽ¯ 70+ Page Goal</span>
+                  <span style={{ fontWeight: "700", color: "var(--violet-200)" }}>🎯 70+ Page Goal</span>
                   <span style={{ color: estimatedTotalPages >= 70 ? "var(--emerald-400)" : "var(--violet-300)", fontWeight: "700" }}>
                     ~{estimatedTotalPages} / 70+ pgs ({pageProgressPercent}%)
                   </span>
@@ -3234,7 +3234,7 @@ export default function Home() {
                 disabled={isAiLoading || pendingSupervisorDraft?.chapter === currentChapter}
                 style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)", padding: "12px", fontSize: "0.92rem", fontWeight: "700" }}
               >
-                <span>âœï¸</span> {isAiLoading ? "Writing full chapter..." : `Write Full Chapter ${currentChapter} (2,500â€“4,000+ words)`}
+                <span>✍️</span> {isAiLoading ? "Writing full chapter..." : `Write Full Chapter ${currentChapter} (2,500–4,000+ words)`}
               </button>
 
               <button
@@ -3243,7 +3243,7 @@ export default function Home() {
                 disabled={isAiLoading || !editorText.trim() || pendingSupervisorDraft?.chapter === currentChapter}
                 style={{ border: "1px solid rgba(16, 185, 129, 0.4)", background: "rgba(16, 185, 129, 0.12)", color: "#ffffff", fontWeight: "600" }}
               >
-                <span>ðŸš€</span> Expand & Deepen Chapter (Add Pages & Depth)
+                <span>🚀</span> Expand & Deepen Chapter (Add Pages & Depth)
               </button>
 
               <textarea
@@ -3286,7 +3286,7 @@ export default function Home() {
                 }
               />
               <p className="visual-plan-note" style={{ color: "var(--violet-200)", lineHeight: "1.4" }}>
-                ðŸ’¡ <strong>Student-Proxy Data Generation:</strong> If you do not have survey or test numbers yet, the AI acts as the student to self-generate realistic raw data tables and statistical findings so your chapter is 100% complete and ready. You can easily adjust the figures later!
+                💡 <strong>Student-Proxy Data Generation:</strong> If you do not have survey or test numbers yet, the AI acts as the student to self-generate realistic raw data tables and statistical findings so your chapter is 100% complete and ready. You can easily adjust the figures later!
               </p>
               <button className="btn btn-secondary btn-sm" onClick={buildOutlineFromGuideline} disabled={isOutlineLoading || !projectContext}>
                 {isOutlineLoading
@@ -3307,7 +3307,7 @@ export default function Home() {
               {/* Candidate & Project Metadata Live Editor */}
               <div style={{ background: "rgba(255,255,255,0.03)", padding: "14px", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <h5 style={{ margin: 0, color: "var(--violet-300)", fontSize: "0.86rem", fontWeight: 600 }}>ðŸŽ“ Candidate & Supervisor Information</h5>
+                  <h5 style={{ margin: 0, color: "var(--violet-300)", fontSize: "0.86rem", fontWeight: 600 }}>🎓 Candidate & Supervisor Information</h5>
                   <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Pre-fills title page, declaration & certification</span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
@@ -3363,7 +3363,7 @@ export default function Home() {
                   style={{ fontSize: "0.72rem", padding: "3px 8px" }}
                   onClick={() => setFrontMatter("dedication", getSampleDedication(project))}
                 >
-                  âš¡ Load Nigerian Dedication Sample
+                  ⚡ Load Nigerian Dedication Sample
                 </button>
               </div>
               <textarea
@@ -3384,7 +3384,7 @@ export default function Home() {
                   style={{ fontSize: "0.72rem", padding: "3px 8px" }}
                   onClick={() => setFrontMatter("acknowledgements", getSampleAcknowledgements(project))}
                 >
-                  âš¡ Load Nigerian Acknowledgements Sample
+                  ⚡ Load Nigerian Acknowledgements Sample
                 </button>
               </div>
               <textarea
@@ -3406,7 +3406,7 @@ export default function Home() {
                     style={{ fontSize: "0.72rem", padding: "3px 8px" }}
                     onClick={() => setFrontMatter("abstract", getSampleAbstract(project))}
                   >
-                    âš¡ Load Academic Abstract Sample
+                    ⚡ Load Academic Abstract Sample
                   </button>
                   <button
                     type="button"
@@ -3508,7 +3508,7 @@ export default function Home() {
                       <span className="pulse-dot"></span>
                       <strong>Generating Chapter {currentChapter}...</strong>
                     </div>
-                    <div className="pipeline-timer">â±ï¸ {elapsedSeconds}s elapsed</div>
+                    <div className="pipeline-timer">⏱️ {elapsedSeconds}s elapsed</div>
                   </div>
                   
                   <div className="pipeline-bar-wrap">
@@ -3522,19 +3522,19 @@ export default function Home() {
 
                   <div className="pipeline-steps">
                     <div className={`pipeline-step ${elapsedSeconds >= 0 ? "active" : ""}`}>
-                      <span className="step-icon">{elapsedSeconds > 3 ? "âœ“" : "â—"}</span>
+                      <span className="step-icon">{elapsedSeconds > 3 ? "✓" : "●"}</span>
                       <span>Reading guideline & research sources</span>
                     </div>
                     <div className={`pipeline-step ${elapsedSeconds >= 4 ? "active" : ""}`}>
-                      <span className="step-icon">{elapsedSeconds > 12 ? "âœ“" : (elapsedSeconds >= 4 ? "â—" : "â—‹")}</span>
+                      <span className="step-icon">{elapsedSeconds > 12 ? "✓" : (elapsedSeconds >= 4 ? "●" : "○")}</span>
                       <span>Synthesizing academic literature & citations</span>
                     </div>
                     <div className={`pipeline-step ${elapsedSeconds >= 13 ? "active" : ""}`}>
-                      <span className="step-icon">{elapsedSeconds > 24 ? "âœ“" : (elapsedSeconds >= 13 ? "â—" : "â—‹")}</span>
+                      <span className="step-icon">{elapsedSeconds > 24 ? "✓" : (elapsedSeconds >= 13 ? "●" : "○")}</span>
                       <span>Drafting chapter prose & section headings</span>
                     </div>
                     <div className={`pipeline-step ${elapsedSeconds >= 25 ? "active" : ""}`}>
-                      <span className="step-icon">{elapsedSeconds >= 25 ? "â—" : "â—‹"}</span>
+                      <span className="step-icon">{elapsedSeconds >= 25 ? "●" : "○"}</span>
                       <span>Formulating tables, figures & Mermaid diagram</span>
                     </div>
                   </div>
@@ -3622,7 +3622,7 @@ export default function Home() {
                 {diagramCode && (
                   <div style={{ marginTop: "14px", padding: "14px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid rgba(139, 92, 246, 0.3)", borderRadius: "8px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                      <strong style={{ fontSize: "0.88rem", color: "#ffffff" }}>ðŸ“Š Chapter Flowchart</strong>
+                      <strong style={{ fontSize: "0.88rem", color: "#ffffff" }}>📊 Chapter Flowchart</strong>
                       <span style={{ fontSize: "0.7rem", padding: "2px 6px", borderRadius: "4px", background: "rgba(56, 189, 248, 0.2)", color: "#38bdf8", fontWeight: 600 }}>
                         Live SVG
                       </span>
@@ -3632,13 +3632,13 @@ export default function Home() {
                     </div>
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                       <button className="btn btn-secondary btn-sm" onClick={handleDownloadDiagramSvg} style={{ flex: 1, fontSize: "0.78rem" }}>
-                        ðŸ’¾ SVG
+                        💾 SVG
                       </button>
                       <button className="btn btn-secondary btn-sm" onClick={() => openDiagramStudioModal(diagramCode, `Figure ${currentChapter}.1: Methodological Framework`)} style={{ flex: 1, fontSize: "0.78rem" }}>
-                        âœï¸ Edit
+                        ✏️ Edit
                       </button>
                       <button className="btn btn-ghost btn-sm" onClick={handleRegenerateChapterFlowchart} title="Reset to standard template" style={{ fontSize: "0.78rem" }}>
-                        ðŸ”„
+                        🔄
                       </button>
                     </div>
                   </div>
@@ -3677,7 +3677,7 @@ export default function Home() {
                 style={{ fontSize: "1.2rem", padding: "4px 8px" }}
                 onClick={() => setIsNewProjectModalOpen(false)}
               >
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -3899,8 +3899,8 @@ export default function Home() {
                   {isAiLoading
                     ? "Reading project documents..."
                     : projectSetupMode === "continue"
-                      ? "Import Chapters 1-3 & Continue â†’"
-                      : "Launch Chapter Workspace â†’"}
+                      ? "Import Chapters 1-3 & Continue →"
+                      : "Launch Chapter Workspace →"}
                 </button>
               </div>
             </form>
@@ -3922,7 +3922,7 @@ export default function Home() {
                   Describe what you need, review the result, then download it or insert it into a chapter.
                 </p>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => setIsVisualStudioOpen(false)} aria-label="Close visual studio">âœ•</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsVisualStudioOpen(false)} aria-label="Close visual studio">✕</button>
             </div>
 
             <div className="modal-body">
@@ -3995,7 +3995,7 @@ export default function Home() {
                   value={visualSuppliedData}
                   onChange={(event) => setVisualSuppliedData(event.target.value)}
                   placeholder={visualKind === "table"
-                    ? "Paste the real results you want shown. Missing values will be marked â€œNot providedâ€; the generator will not invent statistics."
+                    ? "Paste the real results you want shown. Missing values will be marked “Not provided”; the generator will not invent statistics."
                     : "List only the steps and relationships that should appear. Missing details will be flagged for review."}
                 />
               </div>
@@ -4207,7 +4207,7 @@ export default function Home() {
                   Interactive Table Builder
                 </h3>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => setIsTableModalOpen(false)}>âœ•</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsTableModalOpen(false)}>✕</button>
             </div>
 
             <div className="modal-body">
@@ -4314,7 +4314,7 @@ export default function Home() {
                 Cancel
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={handleInsertTableIntoEditor}>
-                âŠž Insert Table into Manuscript
+                ⊞ Insert Table into Manuscript
               </button>
             </div>
           </div>
@@ -4334,7 +4334,7 @@ export default function Home() {
                   Academic Diagram & Flowchart Studio
                 </h3>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => setIsDiagramModalOpen(false)}>âœ•</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsDiagramModalOpen(false)}>✕</button>
             </div>
 
             <div className="modal-body">
@@ -4404,7 +4404,7 @@ export default function Home() {
                 Cancel
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={handleInsertDiagramIntoEditor}>
-                ðŸ“Š Insert Diagram into Manuscript
+                📊 Insert Diagram into Manuscript
               </button>
             </div>
           </div>
@@ -4424,7 +4424,7 @@ export default function Home() {
                   Gemini API Key Failover Pool
                 </h3>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => setIsKeyModalOpen(false)}>âœ•</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsKeyModalOpen(false)}>✕</button>
             </div>
 
             <div className="modal-body">
@@ -4447,7 +4447,7 @@ export default function Home() {
                 ).map((k) => (
                   <div key={k.index} className={`key-pool-item ${k.isActive ? "active" : ""}`}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "1.1rem" }}>{k.isActive ? "ðŸŸ¢" : "ðŸ›¡ï¸"}</span>
+                      <span style={{ fontSize: "1.1rem" }}>{k.isActive ? "🟢" : "🛡️"}</span>
                       <div>
                         <div style={{ fontSize: "0.88rem", fontWeight: "600", color: "#ffffff" }}>
                           API Key #{k.index}
@@ -4530,7 +4530,7 @@ export default function Home() {
                 </p>
               </div>
               <button className="btn btn-ghost btn-sm" onClick={() => setIsExportModalOpen(false)} style={{ fontSize: "1.1rem", padding: "4px 10px" }}>
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -4566,7 +4566,7 @@ export default function Home() {
                     Preliminary Pages
                   </h4>
                   <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: "1.45", marginBottom: "12px" }}>
-                    Download the title page and available preliminary pages without including Chapters 1â€“3 or the main manuscript.
+                    Download the title page and available preliminary pages without including Chapters 1–3 or the main manuscript.
                   </p>
                   <ul style={{ fontSize: "0.76rem", color: "var(--text-muted)", paddingLeft: "16px", lineHeight: "1.65", margin: "0 0 18px 0" }}>
                     <li>Title page</li>
@@ -4629,7 +4629,7 @@ export default function Home() {
                       Pre-Data Defense
                     </span>
                     <span style={{ fontSize: "0.82rem", color: "var(--violet-300)", fontWeight: "600" }}>
-                      Chapters 1 â€“ 3
+                      Chapters 1 – 3
                     </span>
                   </div>
                   <h4 style={{ fontSize: "1.1rem", fontWeight: "700", color: "#ffffff", marginBottom: "8px" }}>
@@ -4640,7 +4640,7 @@ export default function Home() {
                   </p>
                   <ul style={{ fontSize: "0.76rem", color: "var(--text-muted)", paddingLeft: "16px", lineHeight: "1.65", margin: "0 0 18px 0" }}>
                     <li>Proposal Title Page & Certification</li>
-                    <li>TOC & List of Tables/Figures (Ch 1â€“3)</li>
+                    <li>TOC & List of Tables/Figures (Ch 1–3)</li>
                     <li>Chapter 1: Introduction</li>
                     <li>Chapter 2: Literature Review</li>
                     <li>Chapter 3: Research Methodology</li>
@@ -4657,7 +4657,7 @@ export default function Home() {
                     }}
                     style={{ width: "100%", justifyContent: "center" }}
                   >
-                    ðŸ“„ Download Proposal (.docx)
+                    📄 Download Proposal (.docx)
                   </button>
                   <button
                     className="btn btn-secondary btn-sm"
@@ -4701,7 +4701,7 @@ export default function Home() {
                       Final Defense
                     </span>
                     <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)", fontWeight: "600" }}>
-                      Chapters 1 â€“ 5
+                      Chapters 1 – 5
                     </span>
                   </div>
                   <h4 style={{ fontSize: "1.1rem", fontWeight: "700", color: "#ffffff", marginBottom: "8px" }}>
@@ -4713,8 +4713,8 @@ export default function Home() {
                   <ul style={{ fontSize: "0.76rem", color: "var(--text-muted)", paddingLeft: "16px", lineHeight: "1.65", margin: "0 0 18px 0" }}>
                     <li>Full Degree Title Page & Certification</li>
                     <li>Declaration, Dedication, Acknowledgements</li>
-                    <li>Complete Abstract (150â€“300 words)</li>
-                    <li>Full Table of Contents (Chapters 1â€“5)</li>
+                    <li>Complete Abstract (150–300 words)</li>
+                    <li>Full Table of Contents (Chapters 1–5)</li>
                     <li>Chapter 4: Results & Data Analysis</li>
                     <li>Chapter 5: Discussion & Recommendations</li>
                     <li>References & Appendices</li>
@@ -4729,7 +4729,7 @@ export default function Home() {
                     }}
                     style={{ width: "100%", justifyContent: "center" }}
                   >
-                    ðŸ“š Download Full Project (.docx)
+                    📚 Download Full Project (.docx)
                   </button>
                   <button
                     className="btn btn-secondary btn-sm"
@@ -4777,7 +4777,7 @@ export default function Home() {
                 aria-label="Close account dialog"
                 onClick={() => setIsAccountModalOpen(false)}
               >
-                âœ•
+                ✕
               </button>
             </div>
             <form onSubmit={handleAccountSubmit}>
