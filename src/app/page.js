@@ -129,6 +129,8 @@ export default function Home() {
   const [diagramCode, setDiagramCode] = useState("");
   const [isFlowchartCardVisible, setIsFlowchartCardVisible] = useState(true);
   const [refinementRequest, setRefinementRequest] = useState("");
+  const [supervisorFeedbackError, setSupervisorFeedbackError] = useState("");
+  const [pendingSupervisorDraft, setPendingSupervisorDraft] = useState(null);
   const [generatedImages, setGeneratedImages] = useState({});
   const [imageLoadingIndex, setImageLoadingIndex] = useState(null);
   const [isOutlineLoading, setIsOutlineLoading] = useState(false);
@@ -624,7 +626,7 @@ export default function Home() {
     };
     const updatedProject = { ...project, chapters: updatedChapters };
     setProject(updatedProject);
-    setAiFeedback("âœ¨ Draft cleaned! Removed markdown signs (**, ##, <br/>) and standardized academic formatting.");
+    setAiFeedback("✨ Draft cleaned! Removed markdown signs (**, ##, <br/>) and standardized academic formatting.");
   };
 
   const applyTablePreset = (presetName) => {
@@ -979,6 +981,7 @@ export default function Home() {
   useEffect(() => {
     setVisualPlan([]);
     setGeneratedImages({});
+    setPendingSupervisorDraft(null);
     const chContent = project.chapters[currentChapter]?.content || "";
     setEditorText(chContent);
 
@@ -1020,6 +1023,7 @@ export default function Home() {
   const handleEditorChange = (e) => {
     const val = e.target.value;
     setEditorText(val);
+    setPendingSupervisorDraft(null);
     setSaveStatus("Saving changes...");
 
     const updatedChapters = {
@@ -1071,10 +1075,80 @@ export default function Home() {
     (chaptersMeetingMinimum / Object.keys(project.chapters).length) * 100
   );
 
+  const currentChapterFeedback = project.chapters[currentChapter]?.supervisorFeedback || { text: "", images: [] };
+  const currentFeedbackImages = Array.isArray(currentChapterFeedback.images) ? currentChapterFeedback.images : [];
+  const hasUnresolvedSupervisorNotes = (project.supervisorNotes || []).some(
+    (note) => !note.resolved && note.chapter === currentChapter
+  );
+  const hasUnappliedSupervisorFeedback = !currentChapterFeedback.applied &&
+    (Boolean(currentChapterFeedback.text?.trim()) || currentFeedbackImages.length > 0);
+
+  const updateSupervisorFeedback = (updates) => {
+    const currentFeedback = project.chapters[currentChapter]?.supervisorFeedback || { text: "", images: [] };
+    const updatedProject = {
+      ...project,
+      chapters: {
+        ...project.chapters,
+        [currentChapter]: {
+          ...project.chapters[currentChapter],
+          supervisorFeedback: { ...currentFeedback, ...updates, applied: false }
+        }
+      }
+    };
+    setProject(updatedProject);
+  };
+
+  const handleSupervisorImageFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+
+    const acceptedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+    const existingImages = currentFeedbackImages;
+    const existingBytes = existingImages.reduce((total, image) => total + Math.ceil((image.data?.length || 0) * 0.75), 0);
+    if (existingImages.length + files.length > 3) {
+      setSupervisorFeedbackError("Attach up to 3 feedback images per chapter.");
+      return;
+    }
+
+    if (files.some((file) => !acceptedTypes.has(file.type))) {
+      setSupervisorFeedbackError("Use PNG, JPEG, or WebP images for supervisor feedback.");
+      return;
+    }
+    if (files.some((file) => file.size > 750 * 1024) ||
+      existingBytes + files.reduce((total, file) => total + file.size, 0) > 1.5 * 1024 * 1024) {
+      setSupervisorFeedbackError("Feedback images must be 750 KB or smaller each and 1.5 MB total.");
+      return;
+    }
+
+    try {
+      const newImages = await Promise.all(files.map((file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ name: file.name || "Supervisor feedback image", data: reader.result });
+        reader.onerror = () => reject(new Error(`Could not read ${file.name || "the selected image"}.`));
+        reader.readAsDataURL(file);
+      })));
+      updateSupervisorFeedback({ images: [...existingImages, ...newImages] });
+      setSupervisorFeedbackError("");
+    } catch (error) {
+      setSupervisorFeedbackError(error.message || "Could not read the selected feedback image.");
+    }
+  };
+
+  const handleSupervisorFeedbackPaste = (event) => {
+    const imageFiles = Array.from(event.clipboardData?.items || [])
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (imageFiles.length) {
+      event.preventDefault();
+      handleSupervisorImageFiles(imageFiles);
+    }
+  };
+
   // AI Assistant Actions
   const runAiAssist = async (actionType) => {
-    if (actionType !== "generate" && actionType !== "expand" && actionType !== "refine") {
-      setAiFeedback("Choose full chapter writing, deep expansion, or custom refinement.");
+    if (actionType !== "generate" && actionType !== "expand" && actionType !== "refine" && actionType !== "supervisor-rewrite") {
+      setAiFeedback("Choose full chapter writing, deep expansion, custom refinement, or rewrite with supervisor feedback.");
       return;
     }
     if (!projectContext?.guideline || !projectContext?.sources?.length) {
@@ -1083,6 +1157,18 @@ export default function Home() {
     }
     if (!allowAiProcessing) {
       setAiFeedback("Please confirm that you want your uploaded documents sent to Gemini for chapter writing.");
+      return;
+    }
+    if (actionType === "supervisor-rewrite" && !editorText.trim()) {
+      setAiFeedback("Add a chapter draft before asking Gemini to revise it with supervisor feedback.");
+      return;
+    }
+    if (
+      actionType === "supervisor-rewrite" &&
+      !hasUnappliedSupervisorFeedback &&
+      !hasUnresolvedSupervisorNotes
+    ) {
+      setAiFeedback("Add supervisor comments or images for this chapter before requesting a revision.");
       return;
     }
 
@@ -1129,6 +1215,19 @@ export default function Home() {
             })),
           draft: actionType === "generate" ? "" : editorText,
           feedback: actionType === "refine" ? refinementRequest : (actionType === "expand" ? "Deepen literature, add multi-paragraph academic depth, analytical tables, and theoretical foundations to expand page count." : ""),
+          supervisorFeedback: actionType === "supervisor-rewrite"
+            ? {
+                text: hasUnappliedSupervisorFeedback ? currentChapterFeedback.text || "" : "",
+                images: hasUnappliedSupervisorFeedback
+                  ? currentFeedbackImages.map((image) => ({ name: image.name, data: image.data }))
+                  : []
+              }
+            : null,
+          supervisorCorrections: actionType === "supervisor-rewrite"
+            ? (project.supervisorNotes || [])
+                .filter((note) => !note.resolved && note.chapter === currentChapter)
+                .map((note) => ({ chapter: note.chapter, text: note.text }))
+            : [],
           consent: allowAiProcessing
         })
       });
@@ -1152,8 +1251,20 @@ export default function Home() {
       finalDraftContent = sanitizeAcademicDraft(finalDraftContent);
 
       const generatedWordCount = countChapterWords(`${project.chapters[currentChapter]?.title || ""}\n${finalDraftContent}`);
-      if (generatedWordCount < 500) {
-        throw new Error(`The generated chapter contains ${generatedWordCount} words; at least 500 words are required. Please try again or provide more source details.`);
+      const minimumGeneratedWords = actionType === "supervisor-rewrite" ? 100 : 500;
+      if (generatedWordCount < minimumGeneratedWords) {
+        throw new Error(`The generated chapter contains ${generatedWordCount} words; at least ${minimumGeneratedWords} words are required. Please try again or provide more source details.`);
+      }
+      if (actionType === "supervisor-rewrite") {
+        setPendingSupervisorDraft({
+          chapter: currentChapter,
+          content: finalDraftContent,
+          diagram: cleanDiagram,
+          visuals: result.visuals || [],
+          wordCount: generatedWordCount
+        });
+        setAiFeedback(`Chapter ${currentChapter} has been revised from the supervisor feedback. Review the preview below; your current chapter has not been changed.`);
+        return;
       }
       setEditorText(finalDraftContent);
       setVisualPlan(result.visuals || []);
@@ -1185,6 +1296,36 @@ export default function Home() {
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  const applySupervisorDraft = () => {
+    if (!pendingSupervisorDraft || pendingSupervisorDraft.chapter !== currentChapter) return;
+
+    const chapter = project.chapters[currentChapter];
+    const updatedProject = {
+      ...project,
+      chapters: {
+        ...project.chapters,
+        [currentChapter]: {
+          ...chapter,
+          content: pendingSupervisorDraft.content,
+          progress: Math.max(chapter?.progress || 0, Math.min(100, Math.round((pendingSupervisorDraft.wordCount / 2500) * 100))),
+          supervisorFeedback: { ...(chapter?.supervisorFeedback || { text: "", images: [] }), applied: true }
+        }
+      },
+      supervisorNotes: (project.supervisorNotes || []).map((note) =>
+        !note.resolved && note.chapter === currentChapter
+          ? { ...note, resolved: true, resolvedDate: new Date().toLocaleDateString() }
+          : note
+      )
+    };
+
+    setEditorText(pendingSupervisorDraft.content);
+    setVisualPlan(pendingSupervisorDraft.visuals);
+    setDiagramCode(pendingSupervisorDraft.diagram);
+    setProject(updatedProject);
+    setAiFeedback(`Chapter ${currentChapter} revision applied (${pendingSupervisorDraft.wordCount.toLocaleString()} words).`);
+    setPendingSupervisorDraft(null);
   };
 
   const persistProject = (updatedProject) => {
@@ -1788,7 +1929,7 @@ export default function Home() {
 
                     <div style={{ background: "rgba(99, 102, 241, 0.12)", border: "1px solid rgba(139, 92, 246, 0.3)", borderRadius: "10px", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <span style={{ fontSize: "1.2rem" }}>âœ¨</span>
+                        <span style={{ fontSize: "1.2rem" }}>✨</span>
                         <span style={{ fontSize: "0.88rem", color: "var(--violet-300)" }}>
                           <strong>AI Academic Copilot:</strong> Verified APA citation inserted: <em>Adebayo & Okon (2023)</em>. Problem statement aligns with Research Objective #1.
                         </span>
@@ -2789,7 +2930,7 @@ export default function Home() {
                   title="Remove all markdown signs (**, ##, <br/>) and standardize academic formatting"
                   style={{ color: "#38bdf8", border: "1px solid rgba(56, 189, 248, 0.3)", marginLeft: "4px" }}
                 >
-                  <span>âœ¨</span> Clean Formatting
+                  <span>✨</span> Clean Formatting
                 </button>
               </div>
             </div>
@@ -2802,6 +2943,7 @@ export default function Home() {
                     className="editor-title-input"
                     value={project.chapters[currentChapter]?.title || ""}
                     onChange={(e) => {
+                      setPendingSupervisorDraft(null);
                       const updatedChapters = {
                         ...project.chapters,
                         [currentChapter]: {
@@ -3006,12 +3148,90 @@ export default function Home() {
               </div>
             </div>
 
+            <div className="ai-card supervisor-feedback-card">
+              <h4>Supervisor feedback for Chapter {currentChapter}</h4>
+              <p className="visual-plan-note">
+                Paste written corrections or paste/upload screenshots of marked-up pages. Gemini will use this feedback to revise the current draft. The original stays unchanged until you approve the preview.
+              </p>
+              <textarea
+                className="refinement-input"
+                rows="4"
+                value={currentChapterFeedback.text || ""}
+                maxLength={10000}
+                onChange={(event) => updateSupervisorFeedback({ text: event.target.value })}
+                onPaste={handleSupervisorFeedbackPaste}
+                placeholder="Paste supervisor comments and corrections here. You can also paste an image into this box."
+                aria-label={`Supervisor feedback for Chapter ${currentChapter}`}
+              />
+              <label className="form-label" htmlFor={`supervisor-feedback-images-${currentChapter}`}>
+                Attach feedback images (PNG, JPEG, or WebP; up to 3)
+              </label>
+              <input
+                id={`supervisor-feedback-images-${currentChapter}`}
+                className="form-input file-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                onChange={(event) => {
+                  handleSupervisorImageFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+              {currentFeedbackImages.length > 0 && (
+                <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+                  {currentFeedbackImages.map((image, index) => (
+                    <div key={`${image.name}-${index}`} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <img
+                        src={image.data}
+                        alt={`Supervisor feedback ${index + 1}`}
+                        style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "6px" }}
+                      />
+                      <span style={{ flex: 1, fontSize: "0.78rem", color: "var(--text-muted)", overflowWrap: "anywhere" }}>
+                        {image.name}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        aria-label={`Remove ${image.name}`}
+                        onClick={() => updateSupervisorFeedback({
+                          images: currentFeedbackImages.filter((_, imageIndex) => imageIndex !== index)
+                        })}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {supervisorFeedbackError && <p className="form-error" role="alert">{supervisorFeedbackError}</p>}
+              {currentChapterFeedback.applied && (
+                <p className="visual-plan-note">These corrections were used in the accepted Chapter {currentChapter} revision.</p>
+              )}
+              <button
+                type="button"
+                className="ai-tool-button"
+                onClick={() => runAiAssist("supervisor-rewrite")}
+                disabled={
+                  isAiLoading ||
+                  !editorText.trim() ||
+                  !allowAiProcessing ||
+                  pendingSupervisorDraft?.chapter === currentChapter ||
+                  (!hasUnappliedSupervisorFeedback && !hasUnresolvedSupervisorNotes)
+                }
+              >
+                {isAiLoading ? "Revising from supervisor feedback..." : `Revise Chapter ${currentChapter} with Feedback`}
+              </button>
+              {!allowAiProcessing && (
+                <p className="visual-plan-note">Confirm Gemini processing in Project documents before requesting a revision.</p>
+              )}
+            </div>
+
             {/* Tool Action Buttons */}
             <div className="ai-tool-grid">
               <button
                 className="ai-tool-button ai-generate-button"
                 onClick={() => runAiAssist("generate")}
-                disabled={isAiLoading}
+                disabled={isAiLoading || pendingSupervisorDraft?.chapter === currentChapter}
                 style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)", padding: "12px", fontSize: "0.92rem", fontWeight: "700" }}
               >
                 <span>âœï¸</span> {isAiLoading ? "Writing full chapter..." : `Write Full Chapter ${currentChapter} (2,500â€“4,000+ words)`}
@@ -3020,7 +3240,7 @@ export default function Home() {
               <button
                 className="ai-tool-button"
                 onClick={() => runAiAssist("expand")}
-                disabled={isAiLoading || !editorText.trim()}
+                disabled={isAiLoading || !editorText.trim() || pendingSupervisorDraft?.chapter === currentChapter}
                 style={{ border: "1px solid rgba(16, 185, 129, 0.4)", background: "rgba(16, 185, 129, 0.12)", color: "#ffffff", fontWeight: "600" }}
               >
                 <span>ðŸš€</span> Expand & Deepen Chapter (Add Pages & Depth)
@@ -3037,9 +3257,9 @@ export default function Home() {
               <button
                 className="ai-tool-button"
                 onClick={() => runAiAssist("refine")}
-                disabled={isAiLoading || !editorText.trim() || !refinementRequest.trim()}
+                disabled={isAiLoading || !editorText.trim() || !refinementRequest.trim() || pendingSupervisorDraft?.chapter === currentChapter}
               >
-                <span>âœ¨</span> Apply Custom Instructions
+                <span>✨</span> Apply Custom Instructions
               </button>
             </div>
 
@@ -3195,7 +3415,7 @@ export default function Home() {
                     onClick={generateAbstract}
                     disabled={isAbstractLoading}
                   >
-                    {isAbstractLoading ? "Drafting with AI..." : "âœ¨ Draft from Chapters (AI)"}
+                    {isAbstractLoading ? "Drafting with AI..." : "✨ Draft from Chapters (AI)"}
                   </button>
                 </div>
               </div>
@@ -3270,7 +3490,7 @@ export default function Home() {
                       checked={allowAiProcessing}
                       onChange={(e) => setAllowAiProcessing(e.target.checked)}
                     />
-                    Send the uploaded chapters, project documents, or derived visual prompts to Gemini for writing, refinement, or image generation. Google usage limits and charges may apply.
+                    Send uploaded chapters, project documents, supervisor feedback text or images, or derived visual prompts to Gemini for writing, refinement, or image generation. Google usage limits and charges may apply.
                   </label>
                 </>
               ) : (
@@ -3332,6 +3552,37 @@ export default function Home() {
                 <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontStyle: "italic" }}>
                   Choose Write Chapter to create a source-grounded draft, or enter feedback and choose Refine Current Draft.
                 </p>
+              )}
+              {pendingSupervisorDraft?.chapter === currentChapter && (
+                <div style={{ marginTop: "16px" }}>
+                  <h4>Revised Chapter {currentChapter} preview</h4>
+                  <p className="visual-plan-note">
+                    Review this version before applying it. Your existing chapter has not been replaced.
+                  </p>
+                  <textarea
+                    className="refinement-input"
+                    rows="12"
+                    value={pendingSupervisorDraft.content}
+                    readOnly
+                    aria-label={`Revised Chapter ${currentChapter} preview`}
+                  />
+                  <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={applySupervisorDraft} disabled={isAiLoading}>
+                      Apply revised chapter
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={isAiLoading}
+                      onClick={() => {
+                        setPendingSupervisorDraft(null);
+                        setAiFeedback("Revision discarded. Your existing chapter remains unchanged.");
+                      }}
+                    >
+                      Discard revision
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
