@@ -14,6 +14,85 @@ export function cleanHeadingText(text = "") {
     .trim();
 }
 
+function sanitizeLatexNotation(text) {
+  const superscripts = {
+    "0": "⁰",
+    "1": "¹",
+    "2": "²",
+    "3": "³",
+    "4": "⁴",
+    "5": "⁵",
+    "6": "⁶",
+    "7": "⁷",
+    "8": "⁸",
+    "9": "⁹",
+    "+": "⁺",
+    "-": "⁻",
+    "=": "⁼",
+    "(": "⁽",
+    ")": "⁾",
+    n: "ⁿ",
+    i: "ⁱ"
+  };
+  const subscripts = {
+    "0": "₀",
+    "1": "₁",
+    "2": "₂",
+    "3": "₃",
+    "4": "₄",
+    "5": "₅",
+    "6": "₆",
+    "7": "₇",
+    "8": "₈",
+    "9": "₉",
+    "+": "₊",
+    "-": "₋",
+    "=": "₌",
+    "(": "₍",
+    ")": "₎",
+    a: "ₐ",
+    e: "ₑ",
+    h: "ₕ",
+    i: "ᵢ",
+    j: "ⱼ",
+    k: "ₖ",
+    l: "ₗ",
+    m: "ₘ",
+    n: "ₙ",
+    o: "ₒ",
+    p: "ₚ",
+    r: "ᵣ",
+    s: "ₛ",
+    t: "ₜ",
+    u: "ᵤ",
+    v: "ᵥ",
+    x: "ₓ"
+  };
+
+  return text
+    .replace(/\$\$([\s\S]*?)\$\$/g, "$1")
+    .replace(/\$([^$\n]+)\$/g, "$1")
+    .replace(/\\\[([\s\S]*?)\\\]/g, "$1")
+    .replace(/\\\(([\s\S]*?)\\\)/g, "$1")
+    .replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, "$1")
+    .replace(/\\times\b/g, "×")
+    .replace(/\\cdot\b/g, "·")
+    .replace(/\\div\b/g, "÷")
+    .replace(/\\pm\b/g, "±")
+    .replace(/\\(?:leq|le)\b/g, "≤")
+    .replace(/\\(?:geq|ge)\b/g, "≥")
+    .replace(/\\approx\b/g, "≈")
+    .replace(/\\neq\b/g, "≠")
+    .replace(/\^\{([^{}]+)\}|\^([0-9+-]+)/g, (match, grouped, ungrouped) =>
+      [...(grouped || ungrouped)].map((character) => superscripts[character] || character).join("")
+    )
+    .replace(/_\{([^{}]+)\}|_([a-z0-9+-]+)/gi, (match, grouped, ungrouped) =>
+      [...(grouped || ungrouped)].map((character) => subscripts[character] || character).join("")
+    )
+    .replace(/\\(?:,|;|:|!| )/g, " ")
+    .replace(/[ \t]{2,}/g, " ");
+}
+
 export function sanitizeAcademicDraft(text = "") {
   if (typeof text !== "string" || !text) return "";
 
@@ -40,6 +119,8 @@ export function sanitizeAcademicDraft(text = "") {
   // 4. Remove empty bold artifacts (** **, ****, __ __)
   sanitized = sanitized.replace(/\*\*\s*\*\*/g, "");
   sanitized = sanitized.replace(/__\s*__/g, "");
+
+  sanitized = sanitizeLatexNotation(sanitized);
 
   // 5. Line-by-line processing
   const lines = sanitized.split(/\r?\n/);
