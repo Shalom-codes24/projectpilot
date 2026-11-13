@@ -1175,6 +1175,28 @@ export default function Home() {
     setIsAiLoading(true);
     setAiFeedback("");
     try {
+      const activeSupervisorNotes = actionType === "supervisor-rewrite"
+        ? (project.supervisorNotes || []).filter((note) => !note.resolved && note.chapter === currentChapter)
+        : [];
+      const writtenSupervisorFeedbackItems = actionType === "supervisor-rewrite"
+        ? [
+            ...(hasUnappliedSupervisorFeedback
+              ? (currentChapterFeedback.text || "")
+                  .split(/\n+/)
+                  .map((text) => text.trim())
+                  .filter(Boolean)
+                  .map((text, index) => ({ id: `comment-${index + 1}`, text }))
+              : []),
+            ...activeSupervisorNotes.map((note) => ({ id: String(note.id), text: note.text }))
+          ]
+        : [];
+      const supervisorFeedbackImages = actionType === "supervisor-rewrite" && hasUnappliedSupervisorFeedback
+        ? currentFeedbackImages.map((image, index) => ({
+            id: `image-${index + 1}`,
+            name: image.name,
+            data: image.data
+          }))
+        : [];
       const response = await fetch("/api/generate-chapter", {
         method: "POST",
         headers: {
@@ -1218,15 +1240,13 @@ export default function Home() {
           supervisorFeedback: actionType === "supervisor-rewrite"
             ? {
                 text: hasUnappliedSupervisorFeedback ? currentChapterFeedback.text || "" : "",
-                images: hasUnappliedSupervisorFeedback
-                  ? currentFeedbackImages.map((image) => ({ name: image.name, data: image.data }))
-                  : []
+                items: writtenSupervisorFeedbackItems,
+                images: supervisorFeedbackImages
               }
             : null,
           supervisorCorrections: actionType === "supervisor-rewrite"
-            ? (project.supervisorNotes || [])
-                .filter((note) => !note.resolved && note.chapter === currentChapter)
-                .map((note) => ({ chapter: note.chapter, text: note.text }))
+            ? activeSupervisorNotes
+                .map((note) => ({ chapter: note.chapter, id: note.id, text: note.text }))
             : [],
           consent: allowAiProcessing
         })
@@ -1261,6 +1281,7 @@ export default function Home() {
           content: finalDraftContent,
           diagram: cleanDiagram,
           visuals: result.visuals || [],
+          feedbackBreakdown: result.feedbackBreakdown || [],
           wordCount: generatedWordCount
         });
         setAiFeedback(`Chapter ${currentChapter} has been revised from the supervisor feedback. Review the preview below; your current chapter has not been changed.`);
@@ -1302,6 +1323,8 @@ export default function Home() {
     if (!pendingSupervisorDraft || pendingSupervisorDraft.chapter !== currentChapter) return;
 
     const chapter = project.chapters[currentChapter];
+    const allFeedbackAddressed = pendingSupervisorDraft.feedbackBreakdown.every((item) => item.status === "addressed");
+    const revisionDate = new Date().toLocaleDateString();
     const updatedProject = {
       ...project,
       chapters: {
@@ -1310,12 +1333,22 @@ export default function Home() {
           ...chapter,
           content: pendingSupervisorDraft.content,
           progress: Math.max(chapter?.progress || 0, Math.min(100, Math.round((pendingSupervisorDraft.wordCount / 2500) * 100))),
-          supervisorFeedback: { ...(chapter?.supervisorFeedback || { text: "", images: [] }), applied: true }
+          supervisorFeedback: {
+            ...(chapter?.supervisorFeedback || { text: "", images: [] }),
+            applied: allFeedbackAddressed
+          },
+          supervisorRevision: {
+            date: revisionDate,
+            feedbackBreakdown: pendingSupervisorDraft.feedbackBreakdown
+          }
         }
       },
       supervisorNotes: (project.supervisorNotes || []).map((note) =>
-        !note.resolved && note.chapter === currentChapter
-          ? { ...note, resolved: true, resolvedDate: new Date().toLocaleDateString() }
+        !note.resolved && note.chapter === currentChapter &&
+        pendingSupervisorDraft.feedbackBreakdown.some(
+          (item) => item.sourceId === String(note.id) && item.status === "addressed"
+        )
+          ? { ...note, resolved: true, resolvedDate: revisionDate }
           : note
       )
     };
@@ -1324,7 +1357,9 @@ export default function Home() {
     setVisualPlan(pendingSupervisorDraft.visuals);
     setDiagramCode(pendingSupervisorDraft.diagram);
     setProject(updatedProject);
-    setAiFeedback(`Chapter ${currentChapter} revision applied (${pendingSupervisorDraft.wordCount.toLocaleString()} words).`);
+    setAiFeedback(allFeedbackAddressed
+      ? `Chapter ${currentChapter} revision applied (${pendingSupervisorDraft.wordCount.toLocaleString()} words). All listed supervisor feedback was marked addressed.`
+      : `Chapter ${currentChapter} revision applied (${pendingSupervisorDraft.wordCount.toLocaleString()} words). Feedback marked partial or needing clarification remains open.`);
     setPendingSupervisorDraft(null);
   };
 
@@ -3207,6 +3242,29 @@ export default function Home() {
               {currentChapterFeedback.applied && (
                 <p className="visual-plan-note">These corrections were used in the accepted Chapter {currentChapter} revision.</p>
               )}
+              {project.chapters[currentChapter]?.supervisorRevision?.feedbackBreakdown?.length > 0 && (
+                <div style={{ marginTop: "12px" }}>
+                  <strong style={{ display: "block", color: "var(--violet-200)", fontSize: "0.82rem", marginBottom: "8px" }}>
+                    Last accepted revision breakdown ({project.chapters[currentChapter].supervisorRevision.date})
+                  </strong>
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    {project.chapters[currentChapter].supervisorRevision.feedbackBreakdown.map((item, index) => (
+                      <div key={`${item.sourceId}-${index}`} className="note-item">
+                        <strong style={{ display: "block", color: "#ffffff", fontSize: "0.8rem" }}>
+                          {item.status === "addressed" ? "Addressed" : item.status === "partially_addressed" ? "Partially addressed" : "Needs clarification"}
+                          {item.source ? ` · ${item.source}` : ""}
+                        </strong>
+                        <p style={{ margin: "6px 0 0", color: "var(--text-secondary)", fontSize: "0.78rem" }}>
+                          Feedback: {item.correction}
+                        </p>
+                        <p style={{ margin: "4px 0 0", color: "#e2e8f0", fontSize: "0.78rem" }}>
+                          Change made: {item.action}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 className="ai-tool-button"
@@ -3559,6 +3617,28 @@ export default function Home() {
                   <p className="visual-plan-note">
                     Review this version before applying it. Your existing chapter has not been replaced.
                   </p>
+                  <h5 style={{ margin: "12px 0 8px", color: "var(--violet-200)" }}>Supervisor feedback breakdown</h5>
+                  <div style={{ display: "grid", gap: "8px", marginBottom: "12px" }}>
+                    {pendingSupervisorDraft.feedbackBreakdown.map((item, index) => (
+                      <div key={`${item.sourceId}-${index}`} className="note-item">
+                        <strong style={{ display: "block", color: "#ffffff", fontSize: "0.82rem" }}>
+                          {item.status === "addressed" ? "Addressed" : item.status === "partially_addressed" ? "Partially addressed" : "Needs clarification"}
+                          {item.source ? ` · ${item.source}` : ""}
+                        </strong>
+                        <p style={{ margin: "6px 0 0", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
+                          Feedback: {item.correction}
+                        </p>
+                        <p style={{ margin: "4px 0 0", color: "#e2e8f0", fontSize: "0.8rem" }}>
+                          Change made: {item.action}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  {pendingSupervisorDraft.feedbackBreakdown.some((item) => item.status !== "addressed") && (
+                    <p className="form-error" role="alert">
+                      Some feedback could not be fully applied. Review these items and clarify them before accepting the revision if needed.
+                    </p>
+                  )}
                   <textarea
                     className="refinement-input"
                     rows="12"
